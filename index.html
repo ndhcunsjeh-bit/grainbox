@@ -1,0 +1,1942 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>谷盒 GrainBox · 手办/谷子收藏管理</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --green: #3FC79A;        /* 主色：薄荷绿（取自参考图） */
+    --green-d: #23A87F;
+    --green-l: #EAF9F3;
+    --bg: #F4F8F6;
+    --card: #FFFFFF;
+    --border: #E6EEE9;
+    --text: #17221D;
+    --text2: #7A8A82;
+    --primary: #23A87F;      /* 兼容旧变量名，值同步为绿 */
+    --primary2: #3FC79A;
+    --owned: #16A34A;
+    --preorder: #2563EB;
+    --wishlist: #D97706;
+    --sold: #6B7280;
+    --danger: #E5484D;
+    --radius: 16px;
+    --shadow: 0 4px 18px rgba(23,70,52,.06);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Microsoft YaHei", "PingFang SC", -apple-system, sans-serif;
+    min-height: 100vh;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; }
+
+  /* ---------- 顶栏：发现 / 广场 两个大导航 ---------- */
+  header {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(255,255,255,.94); backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .hd-in {
+    max-width: 760px; margin: 0 auto; padding: 0 16px;
+    height: 54px; display: flex; align-items: center;
+  }
+  .logo {
+    font-size: 15px; font-weight: 800; color: var(--green-d);
+    letter-spacing: .3px; display: flex; align-items: center; gap: 6px;
+  }
+  .logo i {
+    width: 22px; height: 22px; border-radius: 7px; display: inline-block;
+    background: linear-gradient(135deg, var(--green), #8BE3C4);
+    position: relative; flex-shrink: 0;
+  }
+  .logo i::after {
+    content: ""; position: absolute; left: 5px; right: 5px; top: 10px;
+    height: 2px; background: #fff; border-radius: 2px;
+  }
+  .big-nav { flex: 1; display: flex; justify-content: center; gap: 30px; }
+  .big-nav a {
+    position: relative; font-size: 18px; font-weight: 700; color: #9AA8A0;
+    padding: 4px 0 12px;
+  }
+  .big-nav a.active { color: var(--text); font-size: 19px; }
+  .big-nav a.active::after {
+    content: ""; position: absolute; left: 50%; transform: translateX(-50%);
+    bottom: 4px; width: 18px; height: 3px; border-radius: 3px; background: var(--green);
+  }
+  .hd-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .hd-avatar {
+    width: 30px; height: 30px; border-radius: 50%; overflow: hidden;
+    background: var(--green-l); color: var(--green-d);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  .hd-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+  main { max-width: 760px; margin: 0 auto; padding: 14px 16px 96px; }
+
+  /* ---------- 通用按钮 ---------- */
+  .btn {
+    border-radius: 10px; padding: 9px 18px; font-size: 14px;
+    background: var(--green); color: #fff; font-weight: 700; transition: .15s;
+  }
+  .btn:hover { background: var(--green-d); }
+  .btn.light { background: #fff; color: var(--green-d); border: 1px solid var(--border); }
+  .btn.light:hover { background: var(--green-l); }
+  .btn.small { padding: 6px 13px; font-size: 13px; border-radius: 8px; }
+  .btn.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  .btn.ghost { background: var(--green-l); color: var(--green-d); }
+
+  /* ---------- 搜索 ---------- */
+  .search-wrap {
+    background: #F0F3F1; border-radius: 22px; height: 42px;
+    display: flex; align-items: center; gap: 8px; padding: 0 16px;
+    margin-bottom: 14px;
+  }
+  .search-wrap svg { flex-shrink: 0; opacity: .45; }
+  .search-wrap input {
+    flex: 1; border: none; outline: none; background: none;
+    font-size: 14px; color: var(--text); font-family: inherit;
+  }
+  .search-wrap input::placeholder { color: #A7B4AD; }
+  .search-wrap .clr { font-size: 16px; color: #A7B4AD; padding: 0 2px; }
+
+  /* ---------- IP 文字导航（纯文字，横向滚动） ---------- */
+  .ip-row {
+    display: flex; gap: 22px; margin-bottom: 14px;
+    overflow-x: auto; overflow-y: hidden;
+    padding: 2px 0 6px; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .ip-row::-webkit-scrollbar { display: none; }
+  .ip {
+    flex-shrink: 0; font-size: 14px; color: var(--text2);
+    white-space: nowrap; cursor: pointer; padding: 3px 1px;
+    position: relative; transition: color .15s;
+  }
+  .ip:hover { color: var(--text); }
+  .ip.on { color: var(--green-d); font-weight: 800; }
+  .ip.on::after {
+    content: ""; position: absolute; left: 50%; transform: translateX(-50%);
+    bottom: -2px; width: 16px; height: 2.5px; border-radius: 2px; background: var(--green);
+  }
+
+  /* ---------- 页签 / chips ---------- */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .chip {
+    padding: 6px 15px; border-radius: 20px; font-size: 13px; cursor: pointer;
+    background: #fff; border: 1px solid var(--border); color: var(--text2);
+  }
+  .chip:hover { border-color: var(--green); color: var(--green-d); }
+  .chip.active { background: var(--green); color: #fff; border-color: transparent; font-weight: 700; }
+
+  /* ---------- 横幅 ---------- */
+  .promo {
+    border-radius: var(--radius); padding: 18px 20px; margin-bottom: 16px;
+    background: linear-gradient(120deg, #FFF1DC, #FFE3CE 55%, #FFD9C2);
+    display: flex; align-items: center; gap: 16px; position: relative; overflow: hidden;
+  }
+  .promo::after {
+    content: ""; position: absolute; right: -30px; top: -30px;
+    width: 120px; height: 120px; border-radius: 50%;
+    background: rgba(255,255,255,.35);
+  }
+  .promo-txt { flex: 1; position: relative; z-index: 1; }
+  .promo-txt b { display: block; font-size: 17px; color: #B4460F; margin-bottom: 5px; }
+  .promo-txt p { font-size: 12.5px; color: #A96A45; line-height: 1.6; }
+  .promo-emoji { font-size: 42px; position: relative; z-index: 1; }
+
+  /* ---------- 卡片网格 ---------- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  @media (max-width: 420px) { .grid { grid-template-columns: 1fr 1fr; gap: 10px; } }
+  .card {
+    background: var(--card); border-radius: var(--radius);
+    overflow: hidden; transition: .18s; display: flex; flex-direction: column;
+    box-shadow: var(--shadow);
+  }
+  .card:hover { transform: translateY(-3px); box-shadow: 0 10px 26px rgba(23,70,52,.12); }
+  .card.clickable { cursor: pointer; }
+  .cover {
+    height: 148px; background: linear-gradient(135deg, #EAF9F3, #D7F2E7);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 40px; font-weight: 800; color: var(--green-d); overflow: hidden;
+  }
+  .cover img { width: 100%; height: 100%; object-fit: cover; }
+  .card-body { padding: 10px 12px 12px; flex: 1; display: flex; flex-direction: column; gap: 5px; }
+  .card-title {
+    font-size: 13.5px; font-weight: 700; line-height: 1.4; color: var(--text);
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .card-meta { font-size: 11.5px; color: var(--text2); }
+  .card-actions { margin-top: auto; display: flex; gap: 8px; padding-top: 6px; }
+
+  /* ---------- 徽章 ---------- */
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 11.5px; font-weight: 700; }
+  .badge.owned    { background: rgba(22,163,74,.12);  color: var(--owned); }
+  .badge.preorder { background: rgba(37,99,235,.12);  color: var(--preorder); }
+  .badge.wishlist { background: rgba(217,119,6,.12);  color: var(--wishlist); }
+  .badge.sold     { background: rgba(107,114,128,.14); color: var(--sold); }
+  .badge.cat      { background: var(--green-l); color: var(--green-d); }
+  .badge.edition  { background: #F1F5F2; color: #5C6B63; }
+
+  /* ---------- 区块标题 ---------- */
+  .sec-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin: 20px 0 12px;
+  }
+  .sec-head h3 { font-size: 15.5px; font-weight: 800; }
+  .sec-head a { font-size: 12.5px; color: var(--text2); }
+  .sub { color: var(--text2); font-size: 13px; margin-bottom: 14px; line-height: 1.6; }
+  h2 { font-size: 20px; margin-bottom: 5px; font-weight: 800; }
+
+  .banner {
+    background: #FFF7E8; border: 1px solid #FFDFA8; color: #A8620C;
+    border-radius: 12px; padding: 12px 15px; font-size: 13.5px; margin-bottom: 14px;
+  }
+
+  /* ---------- 统计看板 ---------- */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; margin-bottom: 22px; }
+  .stat { background: var(--card); border-radius: 14px; padding: 14px 12px; box-shadow: var(--shadow); }
+  .stat .num { font-size: 23px; font-weight: 800; color: var(--green-d); font-variant-numeric: tabular-nums; }
+  .stat .lbl { font-size: 11.5px; color: var(--text2); margin-top: 3px; }
+  .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; font-size: 13px; }
+  .bar-label { width: 110px; color: var(--text2); text-align: right; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-track { flex: 1; background: #EDF3EF; border-radius: 6px; height: 20px; overflow: hidden; }
+  .bar-fill { height: 100%; background: linear-gradient(90deg, var(--green), #8BE3C4); border-radius: 6px; min-width: 3px; transition: width .4s; }
+  .bar-num { width: 34px; font-weight: 700; }
+  h3.sec { font-size: 15px; margin: 18px 0 10px; font-weight: 800; }
+
+  /* ---------- 列表 ---------- */
+  .list { display: flex; flex-direction: column; gap: 10px; }
+  .row-item {
+    display: flex; align-items: center; gap: 12px; background: var(--card);
+    border-radius: 14px; padding: 12px 14px; box-shadow: var(--shadow);
+  }
+  .row-item .thumb {
+    width: 52px; height: 52px; border-radius: 11px; flex-shrink: 0;
+    background: linear-gradient(135deg, #EAF9F3, #D7F2E7);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; color: var(--green-d); font-size: 20px; overflow: hidden;
+  }
+  .row-item .thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .row-main { flex: 1; min-width: 0; }
+  .row-title { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-sub { font-size: 12px; color: var(--text2); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-right { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+
+  /* ---------- 瀑布流帖子（广场） ---------- */
+  .feed { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+  @media (max-width: 560px) { .feed { gap: 8px; } }
+  .post { background: var(--card); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); cursor: pointer; }
+  .post-img {
+    aspect-ratio: 3/4; background: linear-gradient(135deg, #EAF9F3, #D7F2E7);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 34px; font-weight: 800; color: var(--green-d); overflow: hidden;
+  }
+  .post-img img { width: 100%; height: 100%; object-fit: cover; }
+  .post-body { padding: 9px 11px 11px; }
+  .post-title {
+    font-size: 13px; font-weight: 700; line-height: 1.45; margin-bottom: 6px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .post-foot { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text2); }
+  .post-av {
+    width: 17px; height: 17px; border-radius: 50%; background: var(--green-l);
+    color: var(--green-d); font-size: 9px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .post-tag {
+    display: inline-block; margin-bottom: 6px; font-size: 11px; color: var(--green-d);
+    background: var(--green-l); padding: 2px 8px; border-radius: 6px;
+  }
+
+  /* ---------- 表单 ---------- */
+  .form { display: flex; flex-direction: column; gap: 12px; }
+  .field label { display: block; font-size: 12.5px; color: var(--text2); margin-bottom: 5px; }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 10px 12px; border-radius: 10px; font-size: 14px;
+    background: #fff; border: 1px solid var(--border); color: var(--text);
+    font-family: inherit; outline: none;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--green); }
+  .field .req::after { content: " *"; color: var(--danger); }
+  .form-row { display: flex; gap: 10px; }
+  .form-row .field { flex: 1; }
+  .admin-panel { background: var(--card); border-radius: var(--radius); padding: 18px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  .admin-panel h3 { margin-bottom: 14px; font-size: 15px; font-weight: 800; }
+  .stars { display: flex; gap: 4px; }
+  .stars .star { font-size: 21px; color: #D8E2DB; cursor: pointer; }
+  .stars .star.on { color: #F5A524; }
+
+  /* ---------- 详情页 ---------- */
+  .detail { display: grid; grid-template-columns: 300px 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 700px) { .detail { grid-template-columns: 1fr; } }
+  .detail-cover { border-radius: var(--radius); overflow: hidden; background: #fff; box-shadow: var(--shadow); }
+  .detail-cover img, .detail-cover .ph {
+    width: 100%; height: 300px; object-fit: cover; display: flex;
+    align-items: center; justify-content: center; font-size: 60px;
+    color: var(--green-d); background: linear-gradient(135deg,#EAF9F3,#D7F2E7);
+  }
+  .detail-info { background: var(--card); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); }
+  .detail-info h2 { margin-bottom: 8px; }
+  .kv { display: flex; font-size: 13.5px; margin: 7px 0; }
+  .kv .k { width: 76px; color: var(--text2); flex-shrink: 0; }
+  .detail-imgs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .detail-imgs img { width: 78px; height: 78px; object-fit: cover; border-radius: 9px; }
+
+  /* ---------- 弹窗 ---------- */
+  .modal-mask {
+    position: fixed; inset: 0; background: rgba(15,35,26,.46); z-index: 100;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .modal {
+    background: #fff; border-radius: 18px; width: 100%; max-width: 420px; padding: 22px;
+    max-height: 88vh; overflow-y: auto;
+  }
+  .modal h3 { margin-bottom: 16px; font-size: 17px; font-weight: 800; }
+  .modal-foot { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+
+  /* ---------- 登录 / 注册 / 重置密码 ---------- */
+  .auth-tip {
+    background: var(--green-l); border-radius: 10px; padding: 9px 12px;
+    font-size: 11.8px; line-height: 1.7; color: #2C6B55;
+  }
+  .auth-tip b { color: var(--green-d); }
+  .auth-links {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12.5px; color: var(--text2); gap: 8px;
+  }
+  .auth-links a { color: var(--green-d); font-weight: 700; cursor: pointer; }
+  .auth-links a:hover { text-decoration: underline; }
+  .code-row { display: flex; gap: 8px; align-items: stretch; }
+  .code-row input {
+    flex: 1; min-width: 0; text-align: center;
+    letter-spacing: 7px; font-size: 17px; font-weight: 700;
+    font-variant-numeric: tabular-nums; padding-left: 18px;
+  }
+  .code-row .btn { flex-shrink: 0; white-space: nowrap; padding: 0 12px; font-size: 12.5px; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn:disabled:hover { background: var(--green); }
+  .btn.light:disabled:hover { background: #fff; }
+
+  /* ---------- 底部 tabbar ---------- */
+  .tabbar {
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: 0;
+    width: 100%; max-width: 760px; z-index: 60;
+    background: rgba(255,255,255,.97); backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border);
+    display: flex; padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+  }
+  .tabbar a {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    font-size: 10.5px; color: #9BA9A1; padding: 4px 0; position: relative;
+  }
+  .tabbar a svg { width: 22px; height: 22px; }
+  .tabbar a.active { color: var(--green-d); font-weight: 700; }
+  .tabbar a.active svg { stroke: var(--green-d); }
+  .tabbar .dot {
+    position: absolute; top: 2px; right: 22%;
+    min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px;
+    background: #FF5A5F; color: #fff; font-size: 9px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  #toast {
+    position: fixed; top: 66px; left: 50%; transform: translateX(-50%);
+    z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center;
+  }
+  .toast-msg {
+    background: #1D3128; color: #fff; padding: 9px 20px; border-radius: 10px;
+    font-size: 13.5px; animation: fadein .2s; box-shadow: 0 4px 16px rgba(0,0,0,.2);
+  }
+  .toast-msg.err { background: var(--danger); }
+  @keyframes fadein { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; } }
+
+  /* ---------- 我的谷库：图片墙 ---------- */
+  .lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px; }
+  .shot {
+    background: var(--card); border-radius: 14px; overflow: hidden;
+    box-shadow: var(--shadow); cursor: pointer; transition: transform .15s;
+  }
+  .shot:hover { transform: translateY(-2px); }
+  .shot-img {
+    aspect-ratio: 1/1; position: relative; overflow: hidden;
+    background: linear-gradient(135deg, #EAF9F3, #D7F2E7);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 30px; font-weight: 800; color: var(--green-d);
+  }
+  .shot-img img { width: 100%; height: 100%; object-fit: cover; }
+  .shot-img .own {
+    position: absolute; left: 6px; top: 6px; padding: 2px 6px; border-radius: 6px;
+    background: rgba(35,168,127,.92); color: #fff; font-size: 9.5px; font-weight: 700;
+    letter-spacing: .3px;
+  }
+  .shot-body { padding: 8px 10px 10px; }
+  .shot-name {
+    font-size: 12.5px; font-weight: 700; line-height: 1.4;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .shot-foot {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 6px; font-size: 11px; color: var(--text2);
+  }
+  .shot-foot .n { font-variant-numeric: tabular-nums; }
+
+  /* ---------- 相册管理弹窗 ---------- */
+  .shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .shots .ph {
+    position: relative; aspect-ratio: 1/1; border-radius: 10px;
+    overflow: hidden; background: #EDF3EF;
+  }
+  .shots .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .shots .ph .x {
+    position: absolute; right: 3px; top: 3px; width: 20px; height: 20px;
+    border-radius: 50%; background: rgba(0,0,0,.55); color: #fff;
+    font-size: 11px; line-height: 1; display: flex; align-items: center; justify-content: center;
+  }
+  .shots .ph .cv {
+    position: absolute; left: 3px; bottom: 3px; padding: 1px 6px; border-radius: 5px;
+    background: rgba(35,168,127,.94); color: #fff; font-size: 9.5px; font-weight: 700;
+  }
+  .shots .ph .cv.off { background: rgba(0,0,0,.5); font-weight: 400; cursor: pointer; }
+  .shots .add {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; border: 1.5px dashed var(--border); color: var(--text2);
+    font-size: 10.5px; cursor: pointer; background: #FAFCFB;
+  }
+  .shots .add b { font-size: 20px; font-weight: 400; line-height: 1; color: var(--green-d); }
+
+  .empty { text-align: center; color: var(--text2); padding: 50px 0; font-size: 13.5px; }
+  .empty a { color: var(--green-d); font-weight: 700; }
+  .login-tip { text-align: center; padding: 50px 0; color: var(--text2); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hd-in">
+    <span class="logo"><i></i>谷盒</span>
+    <nav class="big-nav" id="nav"></nav>
+    <div class="hd-right" id="userBox"></div>
+  </div>
+</header>
+
+<main id="app"></main>
+<nav class="tabbar" id="tabbar"></nav>
+<div id="toast"></div>
+<div id="modal-root"></div>
+
+<script>
+"use strict";
+
+/* ============================================================
+ * Supabase 配置 —— 把 anon key 粘到下面引号里即可
+ * ============================================================ */
+const SUPABASE_URL = "https://magjnwhcykhtzqfdhhmf.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hZ2pud2hjeWtodHpxZmRoaG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwNjczNTIsImV4cCI6MjEwNzY0MzM1Mn0.0MdN-3z0nLnPVuqTh7n8OUnuYV-z9MBmypwLjSe3M0Q";
+const KEY_OK = SUPABASE_ANON_KEY.length > 100;
+const db = KEY_OK ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+/* ============================================================
+ * 常量映射（与数据库 CHECK 约束一一对应，SRS 表6-3）
+ * ============================================================ */
+const STATUS = {
+  owned:    { zh: "已入手", cls: "owned" },
+  preorder: { zh: "预购",  cls: "preorder" },
+  wishlist: { zh: "想入",  cls: "wishlist" },
+  sold:     { zh: "已出",  cls: "sold" },
+};
+const STATUS_ORDER = ["owned", "preorder", "wishlist", "sold"];
+const CATEGORY = {
+  figure: "手办", prize: "景品", badge: "徽章",
+  stand: "立牌", charm: "挂件", other: "其他",
+};
+const CATEGORY_ORDER = ["figure", "prize", "badge", "stand", "charm", "other"];
+const EDITION = { normal: "普通", limited: "限定", reissue: "再版" };
+const CURRENCIES = ["CNY", "USD", "JPY", "HKD"];
+
+/* IP 图标配色：按系列名稳定哈希取色，保证同一 IP 每次颜色一致 */
+const IP_COLORS = [
+  ["#3FC79A", "#2CB184"], ["#FFB454", "#F59E0B"], ["#7AA7FF", "#5B84F5"],
+  ["#FF8FA3", "#F45D7C"], ["#B18BFF", "#9269F0"], ["#5FD3E8", "#2FB6D0"],
+  ["#FFD166", "#F0B429"], ["#94D68B", "#66BB6A"],
+];
+function ipColor(name) {
+  let h = 0;
+  for (let k = 0; k < name.length; k++) h = (h * 31 + name.charCodeAt(k)) % 9973;
+  return IP_COLORS[h % IP_COLORS.length];
+}
+
+let me = null, myProfile = null;
+
+/* ---------------- 工具 ---------------- */
+const $app = document.getElementById("app");
+const $nav = document.getElementById("nav");
+const $tab = document.getElementById("tabbar");
+const $userBox = document.getElementById("userBox");
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+function toast(msg, isErr) {
+  const el = document.createElement("div");
+  el.className = "toast-msg" + (isErr ? " err" : "");
+  el.textContent = msg;
+  document.getElementById("toast").appendChild(el);
+  setTimeout(() => el.remove(), 2600);
+}
+function fmtDate(d) { return d ? String(d).slice(0, 10) : ""; }
+function fmtMoney(v, cur) {
+  if (v == null) return "—";
+  const sym = { CNY: "¥", USD: "$", JPY: "JP¥", HKD: "HK$" }[cur || "CNY"] || "¥";
+  return sym + Number(v).toLocaleString("zh-CN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+function statusBadge(s) { return '<span class="badge ' + STATUS[s].cls + '">' + STATUS[s].zh + "</span>"; }
+/* ============================================================
+ * 本地封面图映射
+ * 藏品键 = "IP slug:分类"；系列键 = "IP slug"
+ * 图片放在站点 img/ 目录，构建时随部署包一起上传，不依赖外链。
+ * 数据库 items.cover_url 有值时优先用数据库的。
+ * ============================================================ */
+const COVER_ITEM = {
+  "honkai-star-rail:prize": "img/items/honkai-star-rail-prize.webp",
+  "jujutsu-kaisen:prize": "img/items/jujutsu-kaisen-prize.webp",
+  "naruto:badge": "img/items/naruto-badge.webp",
+  "evangelion:prize": "img/items/evangelion-prize.webp",
+  "hatsune-miku:figure": "img/items/hatsune-miku-figure.webp",
+  "hatsune-miku:charm": "img/items/hatsune-miku-charm.webp",
+  "hatsune-miku:badge": "img/items/hatsune-miku-badge.webp",
+  "genshin:badge": "img/items/genshin-badge.webp",
+  "bocchi-the-rock:figure": "img/items/bocchi-the-rock-figure.webp",
+  "genshin:charm": "img/items/genshin-charm.webp",
+  "uma-musume:prize": "img/items/uma-musume-prize.webp",
+  "evangelion:badge": "img/items/evangelion-badge.webp",
+  "honkai-star-rail:stand": "img/items/honkai-star-rail-stand.webp",
+  "bocchi-the-rock:stand": "img/items/bocchi-the-rock-stand.webp",
+  "genshin:stand": "img/items/genshin-stand.webp",
+  "honkai-star-rail:figure": "img/items/honkai-star-rail-figure.webp",
+  "my-hero-academia:badge": "img/items/my-hero-academia-badge.webp",
+  "uma-musume:figure": "img/items/uma-musume-figure.webp",
+  "one-piece:prize": "img/items/one-piece-prize.webp",
+  "evangelion:figure": "img/items/evangelion-figure.webp",
+  "my-hero-academia:figure": "img/items/my-hero-academia-figure.webp",
+  "genshin:prize": "img/items/genshin-prize.webp",
+  "one-piece:stand": "img/items/one-piece-stand.webp",
+  "jujutsu-kaisen:figure": "img/items/jujutsu-kaisen-figure.webp",
+  "bocchi-the-rock:badge": "img/items/bocchi-the-rock-badge.webp",
+  "one-piece:figure": "img/items/one-piece-figure.webp",
+  "genshin:figure": "img/items/genshin-figure.webp",
+  "naruto:figure": "img/items/naruto-figure.webp",
+  "dimoo:figure": "img/items/dimoo-figure.webp",
+  "dimoo:prize": "img/items/dimoo-prize.webp",
+  "dimoo:badge": "img/items/dimoo-badge.webp",
+  "dimoo:stand": "img/items/dimoo-stand.webp",
+  "dimoo:charm": "img/items/dimoo-charm.webp",
+};
+const COVER_SERIES = {
+  "hatsune-miku": "img/series/hatsune-miku.webp",
+  "genshin": "img/series/genshin.webp",
+  "jujutsu-kaisen": "img/series/jujutsu-kaisen.webp",
+  "bocchi-the-rock": "img/series/bocchi-the-rock.webp",
+  "honkai-star-rail": "img/series/honkai-star-rail.webp",
+  "my-hero-academia": "img/series/my-hero-academia.webp",
+  "evangelion": "img/series/evangelion.webp",
+  "one-piece": "img/series/one-piece.webp",
+  "naruto": "img/series/naruto.webp",
+  "uma-musume": "img/series/uma-musume.webp",
+  "dimoo": "img/series/dimoo.webp",
+};
+function itemCoverKey(it) {
+  if (!it) return "";
+  const slug = it.series && it.series.slug ? it.series.slug : "";
+  return slug && it.category ? slug + ":" + it.category : "";
+}
+function coverSrcOf(it, seriesSlug) {
+  if (it && it.cover_url) return it.cover_url;
+  const k = itemCoverKey(it);
+  if (k && COVER_ITEM[k]) return COVER_ITEM[k];
+  return seriesSlug && COVER_SERIES[seriesSlug] ? COVER_SERIES[seriesSlug] : "";
+}
+
+function coverBlock(o, cls, name, local) {
+  const n = name || (o && o.name) || "?";
+  const src = (o && o.cover_url) || local || "";
+  const inner = src
+    ? '<img src="' + esc(src) + '" alt="' + esc(n) + '" loading="lazy" data-ph="' + esc(n.slice(0, 1)) + '" onerror="this.outerHTML=\'<span>\'+this.dataset.ph+\'</span>\'">'
+    : esc(n.slice(0, 1));
+  return '<div class="' + cls + '">' + inner + "</div>";
+}
+function avatarHtml(p, sizeCls) {
+  const n = (p && p.nickname) || "游";
+  return '<span class="' + (sizeCls || "hd-avatar") + '" title="' + esc(n) + '">' +
+    (p && p.avatar_url ? '<img src="' + esc(p.avatar_url) + '" alt="' + esc(n) + '">' : esc(n.slice(0, 1))) +
+    "</span>";
+}
+const icon = {
+  home: '<svg viewBox="0 0 24 24" fill="none" stroke="#9BA9A1" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>',
+  plaza: '<svg viewBox="0 0 24 24" fill="none" stroke="#9BA9A1" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg>',
+  fav: '<svg viewBox="0 0 24 24" fill="none" stroke="#9BA9A1" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.5-7-9.5A4 4 0 0 1 12 7a4 4 0 0 1 7 3.5C19 15.5 12 20 12 20z"/></svg>',
+  chart: '<svg viewBox="0 0 24 24" fill="none" stroke="#9BA9A1" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+  me: '<svg viewBox="0 0 24 24" fill="none" stroke="#9BA9A1" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c0-4 3.4-6 7.5-6s7.5 2 7.5 6"/></svg>',
+  search: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#17221D" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+};
+
+/* ---------------- 顶部大导航：发现 / 广场 / 我的谷库 ---------------- */
+const BIG_TABS = [
+  { hash: "#/",        label: "发现" },
+  { hash: "#/plaza",   label: "广场" },
+  { hash: "#/library", label: "我的谷库" },
+];
+/* ---------------- 底部 tabbar ---------------- */
+const TABS = [
+  { hash: "#/",             label: "首页",     ic: "home" },
+  { hash: "#/plaza",        label: "广场",     ic: "plaza" },
+  { hash: "#/library",      label: "谷库",     ic: "fav", needLogin: true },
+  { hash: "#/dashboard",    label: "看板",     ic: "chart", needLogin: true },
+  { hash: "#/profile",      label: "我的",     ic: "me", needLogin: true },
+  { hash: "#/admin",        label: "管理",     ic: "chart", needLogin: true, needAdmin: true },
+];
+function curRoot() {
+  const cur = location.hash || "#/";
+  const seg = cur.replace(/^#\/?/, "").split("/")[0];
+  if (seg === "series" || seg === "item" || seg === "") return "#/";
+  return "#/" + seg;
+}
+function renderNav() {
+  const root = curRoot();
+  $nav.innerHTML = BIG_TABS.map(t =>
+    '<a href="' + t.hash + '" class="' + (root === t.hash ? "active" : "") + '">' + t.label + "</a>"
+  ).join("");
+  $tab.innerHTML = TABS
+    .filter(t => (!t.needLogin || me) && (!t.needAdmin || (myProfile && myProfile.is_admin)))
+    .map(t => {
+      const on = root === t.hash ? "active" : "";
+      // 广场 tab 上的小红点，模仿参考图的信息角标（数字由 refreshPlazaDot 填充）
+      const dot = (t.hash === "#/plaza" && me) ? '<span class="dot" id="plazaDot">·</span>' : "";
+      return '<a href="' + t.hash + '" class="' + on + '">' + icon[t.ic] + "<span>" + t.label + "</span>" + dot + "</a>";
+    }).join("");
+  // 广场红点只在有公开收藏时显示
+  if (me) refreshPlazaDot();
+}
+async function refreshPlazaDot() {
+  const badge = $tab.querySelector('#plazaDot');
+  if (!badge) return;
+  const { count } = await db.from("collections").select("id", { count: "exact", head: true }).eq("is_public", true);
+  const el = $tab.querySelector('#plazaDot');
+  if (!el) return;
+  if (count > 0) el.textContent = count > 99 ? "99+" : String(count);
+  else el.remove();
+}
+function renderUserBox() {
+  $userBox.innerHTML = me
+    ? '<span class="hd-avatar" id="btnMe" title="我的">' +
+        (myProfile && myProfile.avatar_url
+          ? '<img src="' + esc(myProfile.avatar_url) + '" alt="">'
+          : esc(((myProfile && myProfile.nickname) || "游").slice(0, 1))) +
+      "</span>"
+    : '<button class="btn small" id="btnLogin">登录</button>';
+  const b1 = document.getElementById("btnLogin");
+  if (b1) b1.onclick = () => showAuthModal("login");
+  const b2 = document.getElementById("btnMe");
+  if (b2) b2.onclick = () => {
+    openModal(`
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        ${avatarHtml(myProfile, "hd-avatar")}
+        <div>
+          <div style="font-weight:800">${esc((myProfile && myProfile.nickname) || "未命名")}</div>
+          <div style="font-size:12px;color:var(--text2)">${esc(me.email || "")}${myProfile && myProfile.is_admin ? " · 管理员" : ""}</div>
+        </div>
+      </div>
+      <div class="form">
+        <button class="btn light" id="mProfile">编辑档案</button>
+        <button class="btn light" id="mLogout" style="color:var(--danger)">退出登录</button>
+      </div>`);
+    document.getElementById("mProfile").onclick = () => { closeModal(); location.hash = "#/profile"; };
+    document.getElementById("mLogout").onclick = async () => {
+      logLogin("logout");
+      await db.auth.signOut();
+      me = null; myProfile = null; closeModal();
+      location.hash = "#/"; boot();
+    };
+  };
+}
+
+/* ============================================================
+ * 登录 / 注册 / 忘记密码
+ *   注册：邮箱 + 密码 + 6 位邮箱验证码（verifyOtp type=signup）
+ *   找回：邮箱 → 验证码（type=recovery）→ 新密码
+ *   未验证邮箱的老账号：登录被拒时自动转「输验证码补验证」
+ * 密码明文只在浏览器内存里过一下，直接交给 Supabase Auth；
+ * 服务端用 bcrypt 单向哈希存进 auth.users.encrypted_password，
+ * 本站任何业务表都不存密码，也不存哈希。
+ * ============================================================ */
+let authTimer = null;   // 「重新发送」倒计时
+let authEmail = "";     // 跨步骤传递的邮箱
+
+function authValidEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v); }
+function authValidPass(v) { return v.length >= 8 && /[a-zA-Z]/.test(v) && /\d/.test(v); }
+function authTips(html) { return '<div class="auth-tip">' + html + "</div>"; }
+
+function startCooldown(btnId, sec, label) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  let left = sec;
+  btn.disabled = true;
+  const paint = () => {
+    if (left > 0) {
+      btn.textContent = left + "s 后重发";
+      left--;
+    } else {
+      if (authTimer) { clearInterval(authTimer); authTimer = null; }
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  };
+  paint();
+  authTimer = setInterval(paint, 1000);
+}
+
+// 登录审计：写进 login_logs（只有 security definer 函数能写，客户端无写权限）
+async function logLogin(event) {
+  try {
+    await db.rpc("fn_log_login", {
+      p_event: event,
+      p_ua: (navigator.userAgent || "").slice(0, 180),
+    });
+  } catch (e) { /* 审计失败不影响登录 */ }
+}
+
+async function afterLogin(msg) {
+  closeModal();
+  toast(msg || "登录成功");
+  await loadMe(); renderNav(); renderUserBox(); route();
+}
+
+function showAuthModal(view) {
+  if (authTimer) { clearInterval(authTimer); authTimer = null; }
+  if (view === "signup")  return showSignupModal();
+  if (view === "verify")  return showVerifyModal();
+  if (view === "reset")   return showResetModal();
+  if (view === "newpass") return showNewPassModal();
+  return showLoginModal();
+}
+
+/* ---------------- 登录 ---------------- */
+function showLoginModal() {
+  openModal(`<h3>登录</h3>
+    <div class="form">
+      <div class="field"><label>邮箱</label>
+        <input id="aEmail" type="email" autocomplete="username" placeholder="you@example.com" value="${esc(authEmail)}"></div>
+      <div class="field"><label>密码</label>
+        <input id="aPass" type="password" autocomplete="current-password" placeholder="********"></div>
+      <button class="btn" id="aGo">登录</button>
+      <div class="auth-links">
+        <a href="javascript:void(0)" id="aForgot">忘记密码？</a>
+        <span>还没有账号？<a href="javascript:void(0)" id="aSignup">去注册</a></span>
+      </div>
+    </div>`);
+
+  document.getElementById("aSignup").onclick = () => showAuthModal("signup");
+  document.getElementById("aForgot").onclick = () => showAuthModal("reset");
+
+  const go = async () => {
+    const email = document.getElementById("aEmail").value.trim();
+    const pass = document.getElementById("aPass").value;
+    if (!authValidEmail(email)) return toast("邮箱格式不对", true);
+    if (!pass) return toast("请输入密码", true);
+    const btn = document.getElementById("aGo");
+    btn.disabled = true; btn.textContent = "登录中…";
+    const { error } = await db.auth.signInWithPassword({ email, password: pass });
+    btn.disabled = false; btn.textContent = "登录";
+    if (error) {
+      const msg = error.message || "";
+      // 邮箱还没验证时 Supabase 直接拒登：不甩给用户一句英文报错，转去补验证
+      if (/not confirmed/i.test(msg)) {
+        authEmail = email;
+        await db.auth.resend({ type: "signup", email });
+        toast("邮箱还没验证，已重新发送验证码");
+        return showAuthModal("verify");
+      }
+      return toast("登录失败：" + msg, true);
+    }
+    authEmail = email;
+    logLogin("login");
+    await afterLogin("登录成功");
+  };
+  document.getElementById("aGo").onclick = go;
+  document.getElementById("aPass").onkeydown = ev => { if (ev.key === "Enter") go(); };
+}
+
+/* ---------------- 注册（邮箱 + 密码 + 验证码） ---------------- */
+function showSignupModal() {
+  openModal(`<h3>注册账号</h3>
+    ${authTips("先填邮箱和密码点「发送验证码」，收到 6 位数字后填进来完成注册。<br>密码由 Supabase Auth 以 bcrypt 单向哈希保存，本站不存明文。")}
+    <div class="form" style="margin-top:12px">
+      <div class="field"><label>邮箱</label>
+        <input id="aEmail" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(authEmail)}"></div>
+      <div class="field"><label>密码（至少 8 位，含字母和数字）</label>
+        <input id="aPass" type="password" autocomplete="new-password" placeholder="********"></div>
+      <div class="field"><label>邮箱验证码</label>
+        <div class="code-row">
+          <input id="aCode" inputmode="numeric" maxlength="6" placeholder="6 位数字" autocomplete="one-time-code">
+          <button class="btn light" id="aSend">发送验证码</button>
+        </div>
+      </div>
+      <button class="btn" id="aGo">完成注册</button>
+      <div class="auth-links"><span>已有账号？<a href="javascript:void(0)" id="aLogin">去登录</a></span></div>
+    </div>`);
+
+  document.getElementById("aLogin").onclick = () => showAuthModal("login");
+  const read = () => ({
+    email: document.getElementById("aEmail").value.trim(),
+    pass: document.getElementById("aPass").value,
+    code: document.getElementById("aCode").value.replace(/\D/g, ""),
+  });
+
+  document.getElementById("aSend").onclick = async () => {
+    const { email, pass } = read();
+    if (!authValidEmail(email)) return toast("先填一个正确的邮箱", true);
+    if (!authValidPass(pass)) return toast("密码需至少 8 位且含字母和数字", true);
+    const btn = document.getElementById("aSend");
+    btn.disabled = true; btn.textContent = "发送中…";
+    // 真正建账号并触发验证码邮件；同邮箱重复注册不报错（防枚举）
+    const { data, error } = await db.auth.signUp({ email, password: pass });
+    if (error) {
+      btn.disabled = false; btn.textContent = "发送验证码";
+      return toast("发送失败：" + error.message, true);
+    }
+    authEmail = email;
+    // 项目若关掉了「邮箱确认」，signUp 会直接返回 session，那就不需要验证码
+    if (data && data.session) {
+      logLogin("login");
+      return afterLogin("注册成功，已登录");
+    }
+    // identities 为空 = 这个邮箱早就注册过（Supabase 防枚举的标准返回）
+    if (data && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      btn.disabled = false; btn.textContent = "发送验证码";
+      toast("这个邮箱已经注册过了，请直接登录", true);
+      return showAuthModal("login");
+    }
+    toast("验证码已发到邮箱，10 分钟内有效");
+    startCooldown("aSend", 60, "重新发送");
+  };
+
+  document.getElementById("aGo").onclick = async () => {
+    const { email, code } = read();
+    if (!authValidEmail(email)) return toast("邮箱格式不对", true);
+    if (code.length !== 6) return toast("验证码是 6 位数字", true);
+    const btn = document.getElementById("aGo");
+    btn.disabled = true; btn.textContent = "验证中…";
+    const { error } = await db.auth.verifyOtp({ email, token: code, type: "signup" });
+    btn.disabled = false; btn.textContent = "完成注册";
+    if (error) return toast("验证失败：" + error.message, true);
+    logLogin("login");
+    await afterLogin("注册成功，已登录");
+  };
+}
+
+/* ---------------- 补验证：邮箱未确认 ---------------- */
+function showVerifyModal() {
+  openModal(`<h3>验证邮箱</h3>
+    ${authTips("验证码已发到 <b>" + esc(authEmail) + "</b>，6 位数字，10 分钟内有效。")}
+    <div class="form" style="margin-top:12px">
+      <div class="field"><label>邮箱验证码</label>
+        <div class="code-row">
+          <input id="aCode" inputmode="numeric" maxlength="6" placeholder="6 位数字" autocomplete="one-time-code">
+          <button class="btn light" id="aSend">重新发送</button>
+        </div>
+      </div>
+      <button class="btn" id="aGo">验证并登录</button>
+      <div class="auth-links"><a href="javascript:void(0)" id="aBack">返回登录</a><span></span></div>
+    </div>`);
+
+  document.getElementById("aBack").onclick = () => showAuthModal("login");
+  startCooldown("aSend", 30, "重新发送");
+
+  document.getElementById("aSend").onclick = async () => {
+    const btn = document.getElementById("aSend");
+    btn.disabled = true;
+    const { error } = await db.auth.resend({ type: "signup", email: authEmail });
+    if (error) {
+      btn.disabled = false;
+      return toast("发送失败：" + error.message, true);
+    }
+    toast("验证码已重新发送");
+    startCooldown("aSend", 60, "重新发送");
+  };
+
+  document.getElementById("aGo").onclick = async () => {
+    const code = document.getElementById("aCode").value.replace(/\D/g, "");
+    if (code.length !== 6) return toast("验证码是 6 位数字", true);
+    const btn = document.getElementById("aGo");
+    btn.disabled = true; btn.textContent = "验证中…";
+    const { error } = await db.auth.verifyOtp({ email: authEmail, token: code, type: "signup" });
+    btn.disabled = false; btn.textContent = "验证并登录";
+    if (error) return toast("验证失败：" + error.message, true);
+    logLogin("login");
+    await afterLogin("邮箱已验证，登录成功");
+  };
+}
+
+/* ---------------- 忘记密码：验证码 + 新密码 ---------------- */
+function showResetModal() {
+  openModal(`<h3>忘记密码</h3>
+    ${authTips("填注册时用的邮箱，点「发送验证码」，收到 6 位数字后设置新密码。")}
+    <div class="form" style="margin-top:12px">
+      <div class="field"><label>邮箱</label>
+        <input id="aEmail" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(authEmail)}"></div>
+      <div class="field"><label>邮箱验证码</label>
+        <div class="code-row">
+          <input id="aCode" inputmode="numeric" maxlength="6" placeholder="6 位数字" autocomplete="one-time-code">
+          <button class="btn light" id="aSend">发送验证码</button>
+        </div>
+      </div>
+      <div class="field"><label>新密码（至少 8 位，含字母和数字）</label>
+        <input id="aPass" type="password" autocomplete="new-password" placeholder="********"></div>
+      <button class="btn" id="aGo">重置密码</button>
+      <div class="auth-links"><a href="javascript:void(0)" id="aBack">返回登录</a><span></span></div>
+    </div>`);
+
+  document.getElementById("aBack").onclick = () => showAuthModal("login");
+
+  document.getElementById("aSend").onclick = async () => {
+    const email = document.getElementById("aEmail").value.trim();
+    if (!authValidEmail(email)) return toast("邮箱格式不对", true);
+    const btn = document.getElementById("aSend");
+    btn.disabled = true; btn.textContent = "发送中…";
+    const { error } = await db.auth.resetPasswordForEmail(email);
+    if (error) {
+      btn.disabled = false; btn.textContent = "发送验证码";
+      return toast("发送失败：" + error.message, true);
+    }
+    authEmail = email;
+    toast("验证码已发到邮箱，10 分钟内有效");
+    startCooldown("aSend", 60, "重新发送");
+  };
+
+  document.getElementById("aGo").onclick = async () => {
+    const email = document.getElementById("aEmail").value.trim();
+    const code = document.getElementById("aCode").value.replace(/\D/g, "");
+    const pass = document.getElementById("aPass").value;
+    if (!authValidEmail(email)) return toast("邮箱格式不对", true);
+    if (code.length !== 6) return toast("验证码是 6 位数字", true);
+    if (!authValidPass(pass)) return toast("密码需至少 8 位且含字母和数字", true);
+    const btn = document.getElementById("aGo");
+    btn.disabled = true; btn.textContent = "提交中…";
+    const v = await db.auth.verifyOtp({ email, token: code, type: "recovery" });
+    if (v.error) {
+      btn.disabled = false; btn.textContent = "重置密码";
+      return toast("验证失败：" + v.error.message, true);
+    }
+    logLogin("reset");
+    const u = await db.auth.updateUser({ password: pass });
+    btn.disabled = false; btn.textContent = "重置密码";
+    if (u.error) return toast("重置失败：" + u.error.message, true);
+    await db.auth.signOut();
+    await loadMe(); renderNav(); renderUserBox(); route();
+    closeModal();
+    toast("密码已重置，请用新密码登录");
+    showAuthModal("login");
+  };
+}
+
+/* ---------------- 点邮件里的重置链接回来：直接设新密码 ---------------- */
+function showNewPassModal() {
+  openModal(`<h3>设置新密码</h3>
+    ${authTips("邮箱验证已通过，输入新密码即可完成重置。")}
+    <div class="form" style="margin-top:12px">
+      <div class="field"><label>新密码（至少 8 位，含字母和数字）</label>
+        <input id="aPass" type="password" autocomplete="new-password" placeholder="********"></div>
+      <div class="field"><label>再输一次</label>
+        <input id="aPass2" type="password" autocomplete="new-password" placeholder="********"></div>
+      <button class="btn" id="aGo">保存新密码</button>
+    </div>`);
+
+  document.getElementById("aGo").onclick = async () => {
+    const p1 = document.getElementById("aPass").value;
+    const p2 = document.getElementById("aPass2").value;
+    if (!authValidPass(p1)) return toast("密码需至少 8 位且含字母和数字", true);
+    if (p1 !== p2) return toast("两次输入的密码不一致", true);
+    const btn = document.getElementById("aGo");
+    btn.disabled = true; btn.textContent = "保存中…";
+    const { error } = await db.auth.updateUser({ password: p1 });
+    btn.disabled = false; btn.textContent = "保存新密码";
+    if (error) return toast("保存失败：" + error.message, true);
+    logLogin("reset");
+    closeModal();
+    toast("密码已更新");
+    await loadMe(); renderNav(); renderUserBox(); route();
+  };
+}
+
+function openModal(html) {
+  document.getElementById("modal-root").innerHTML =
+    '<div class="modal-mask" id="mask"><div class="modal">' + html + "</div></div>";
+  document.getElementById("mask").onclick = e => { if (e.target.id === "mask") closeModal(); };
+}
+function closeModal() { document.getElementById("modal-root").innerHTML = ""; }
+
+/* ---------------- 数据加载 ---------------- */
+async function loadMe() {
+  const { data: { session } } = await db.auth.getSession();
+  me = session ? session.user : null;
+  myProfile = null;
+  if (me) {
+    const { data } = await db.from("profiles").select("*").eq("id", me.id).single();
+    myProfile = data;
+  }
+}
+
+/* ---------------- 路由 ---------------- */
+function route() {
+  renderNav();
+  const h = location.hash || "#/";
+  const parts = h.replace(/^#\/?/, "").split("/");
+  const page = parts[0] || "home";
+  const param = parts[1] ? decodeURIComponent(parts[1]) : "";
+  window.scrollTo(0, 0);
+  // 直接进发现页时清空筛选状态，避免上次筛的 IP/分类残留
+  if (page === "home" && !param) { ipFilter = ""; catFilter = ""; kwFilter = ""; }
+
+  if (!KEY_OK) return $app.innerHTML = '<div class="banner">⚠️ 尚未配置 Supabase anon key：编辑本文件顶部 SUPABASE_ANON_KEY 的值，刷新即可。</div>';
+  // 旧的「我的收藏」地址统一并到谷库，避免老链接 404
+  if (page === "collections") return location.hash = "#/library";
+  if ((page === "dashboard" || page === "profile") && !me) return location.hash = "#/";
+  if (page === "admin" && (!me || !myProfile || !myProfile.is_admin)) return $app.innerHTML = '<div class="empty">只有管理员能访问此页</div>';
+
+  if (page === "home")    return pageHome();
+  if (page === "series")  return pageSeries(param);
+  if (page === "item")    return pageItem(param);
+  if (page === "plaza")   return pagePlaza();
+  if (page === "search")  return pageSearch(param);
+  if (page === "library") return pageLibrary();
+  if (page === "dashboard")   return pageDashboard();
+  if (page === "profile")     return pageProfile();
+  if (page === "admin")       return pageAdmin();
+  return pageHome();
+}
+
+/* ============================================================
+ * 发现页（首页）：搜索 + IP 图标导航 + 分类 chips + 藏品流
+ * ============================================================ */
+let ipFilter = "";       // 当前选中的 IP slug，"all" 表示推荐
+let catFilter = "";      // 当前分类
+let kwFilter = "";       // 搜索关键词
+
+async function pageHome() {
+  const { data: series, error } = await db.from("v_series_stats").select("*").order("name");
+  if (error) return $app.innerHTML = '<div class="empty">加载失败：' + esc(error.message) + "</div>";
+  const list = series || [];
+
+  $app.innerHTML = `
+    <div class="search-wrap">
+      ${icon.search}
+      <input id="q" placeholder="搜索藏品、系列、IP…" value="${esc(kwFilter)}" autocomplete="off">
+      ${kwFilter ? '<span class="clr" id="qclr">✕</span>' : ""}
+    </div>
+
+    <div class="ip-row" id="ipRow">${ipRowHtml(list)}</div>
+
+    <div class="chips" id="catRow">
+      <span class="chip ${catFilter === "" ? "active" : ""}" data-cat="">全部</span>
+      ${CATEGORY_ORDER.map(c => '<span class="chip ' + (catFilter === c ? "active" : "") + '" data-cat="' + c + '">' + CATEGORY[c] + "</span>").join("")}
+    </div>
+
+    ${ipFilter === "" && !catFilter && !kwFilter ? `
+      <div class="promo">
+        <div class="promo-txt">
+          <b>@晒谷大会 · 开盒晒图有奖</b>
+          <p>公开你的收藏到广场，就有机会登上本周热榜<br>发现 → 收藏 → 晒出，三步搞定</p>
+        </div>
+        <div class="promo-emoji">🎁</div>
+      </div>` : ""}
+
+    <div class="sec-head">
+      <h3 id="listTitle">${listTitle(list)}</h3>
+      <span class="card-meta" id="listCount"></span>
+    </div>
+    <div class="grid" id="itemGrid"><div class="empty">加载中…</div></div>`;
+
+  bindHomeEvents(list);
+  await loadItems(list);
+}
+
+function ipChip(s) {
+  const on = ipFilter === s.slug ? "on" : "";
+  // 纯文字导航：名字过长截到 6 字（完整名放 title，hover 可见）
+  const label = s.name.length > 6 ? s.name.slice(0, 6) + "…" : s.name;
+  return '<div class="ip ' + on + '" data-ip="' + esc(s.slug) + '" title="' + esc(s.name) + '">' +
+    esc(label) + "</div>";
+}
+
+function ipRowHtml(list) {
+  const rec = '<div class="ip ' + (ipFilter === "" ? "on" : "") + '" data-ip="">推荐</div>';
+  return rec + list.map(ipChip).join("");
+}
+
+function listTitle(list) {
+  if (kwFilter) return "搜索「" + kwFilter + "」";
+  if (catFilter) return CATEGORY[catFilter];
+  if (ipFilter) {
+    const s = list.find(x => x.slug === ipFilter);
+    return s ? s.name : "藏品";
+  }
+  return "推荐藏品";
+}
+
+async function loadItems(list) {
+  const grid = document.getElementById("itemGrid");
+  if (!grid) return;
+  let q = db.from("items").select("*, series(name, slug)");
+  if (ipFilter) {
+    const s = list.find(x => x.slug === ipFilter);
+    if (s) q = q.eq("series_id", s.series_id || s.id);
+  }
+  if (catFilter) q = q.eq("category", catFilter);
+  if (kwFilter) q = q.ilike("name", "%" + kwFilter + "%");
+  const { data: items, error } = await q.order("name").limit(60);
+  if (error) { grid.innerHTML = '<div class="empty">加载失败：' + esc(error.message) + "</div>"; return; }
+  const arr = items || [];
+  const cnt = document.getElementById("listCount");
+  if (cnt) cnt.textContent = arr.length + " 件";
+
+  if (arr.length === 0) {
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">没有匹配的藏品<br>换个关键词或 IP 试试</div>';
+    return;
+  }
+  grid.innerHTML = arr.map(it => `
+    <div class="card clickable" data-id="${it.id}">
+      ${coverBlock(it, "cover", null, coverSrcOf(it))}
+      <div class="card-body">
+        <div class="card-title">${esc(it.name)}</div>
+        <div class="card-meta">${esc(it.series ? it.series.name : "")}</div>
+        <div class="card-meta">
+          <span class="badge cat">${CATEGORY[it.category]}</span>
+        </div>
+      </div>
+    </div>`).join("");
+  grid.querySelectorAll(".card[data-id]").forEach(c => c.onclick = () => { location.hash = "#/item/" + c.dataset.id; });
+}
+
+function bindHomeEvents(list) {
+  const q = document.getElementById("q");
+  let timer;
+  q.oninput = ev => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      kwFilter = ev.target.value.trim();
+      location.hash = kwFilter ? "#/search/" + encodeURIComponent(kwFilter) : "#/";
+    }, 380);
+  };
+  q.onkeydown = ev => {
+    if (ev.key === "Enter") {
+      kwFilter = q.value.trim();
+      ipFilter = ""; catFilter = "";
+      location.hash = kwFilter ? "#/search/" + encodeURIComponent(kwFilter) : "#/";
+      pageHome();
+    }
+  };
+  const clr = document.getElementById("qclr");
+  if (clr) clr.onclick = () => { kwFilter = ""; location.hash = "#/"; };
+
+  document.querySelectorAll("#ipRow .ip").forEach(el => el.onclick = () => {
+    ipFilter = el.dataset.ip;
+    pageHome();
+  });
+  document.querySelectorAll("#catRow .chip").forEach(el => el.onclick = () => {
+    catFilter = el.dataset.cat;
+    pageHome();
+  });
+}
+
+/* ---------------- 搜索结果页（FR-27） ---------------- */
+async function pageSearch(kw) {
+  kwFilter = kw;
+  const { data: items } = await db.from("items").select("*, series(name, slug)").ilike("name", "%" + kw + "%").order("name").limit(60);
+  const { data: sers } = await db.from("series").select("*").ilike("name", "%" + kw + "%");
+  const arr = items || [], ss = sers || [];
+
+  $app.innerHTML = `
+    <div class="search-wrap">
+      ${icon.search}
+      <input id="q" placeholder="搜索藏品、系列、IP…" value="${esc(kw)}" autocomplete="off">
+      <span class="clr" id="qclr">✕</span>
+    </div>
+    <div class="sec-head"><h3>搜索「${esc(kw)}」</h3><span class="card-meta">共 ${arr.length + ss.length} 条</span></div>
+    ${ss.length ? '<h3 class="sec">相关 IP</h3><div class="chips">' +
+        ss.map(s => '<span class="chip" data-slug="' + esc(s.slug) + '">' + esc(s.name) + " · 进入系列</span>").join("") + "</div>" : ""}
+    ${arr.length === 0 && ss.length === 0
+      ? '<div class="empty">没有找到相关结果<br>试试「手办」「徽章」或者 IP 名</div>'
+      : '<div class="grid" id="itemGrid">' + arr.map(it => `
+        <div class="card clickable" data-id="${it.id}">
+          ${coverBlock(it, "cover", null, coverSrcOf(it))}
+          <div class="card-body">
+            <div class="card-title">${esc(it.name)}</div>
+            <div class="card-meta">${esc(it.series ? it.series.name : "")}</div>
+            <div class="card-meta"><span class="badge cat">${CATEGORY[it.category]}</span></div>
+          </div>
+        </div>`).join("") + "</div>"}`;
+
+  const q = document.getElementById("q");
+  let timer;
+  q.oninput = ev => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const v = ev.target.value.trim();
+      location.hash = v ? "#/search/" + encodeURIComponent(v) : "#/";
+    }, 380);
+  };
+  document.getElementById("qclr").onclick = () => { kwFilter = ""; location.hash = "#/"; };
+  $app.querySelectorAll("[data-slug]").forEach(c => c.onclick = () => { location.hash = "#/series/" + c.dataset.slug; });
+  $app.querySelectorAll(".card[data-id]").forEach(c => c.onclick = () => { location.hash = "#/item/" + c.dataset.id; });
+}
+
+/* ============================================================
+ * 系列详情（FR-07）：按 category 分组
+ * ============================================================ */
+async function pageSeries(slug) {
+  const { data: s } = await db.from("series").select("*").eq("slug", slug).single();
+  if (!s) return $app.innerHTML = '<div class="empty">系列不存在</div>';
+  const { data: items } = await db.from("items").select("*, series(name, slug)").eq("series_id", s.id).order("name");
+  const groups = {};
+  (items || []).forEach(it => { (groups[it.category] = groups[it.category] || []).push(it); });
+
+  $app.innerHTML = `
+    <div style="margin:6px 0 14px">
+      <h2 style="margin:0">${esc(s.name)}</h2>
+      <div class="card-meta">${esc(s.description || "")} · 共 ${(items || []).length} 件</div>
+    </div>
+    <div class="chips"><span class="chip" data-back="1">← 返回发现</span></div>
+    ${CATEGORY_ORDER.filter(cc => groups[cc]).map(cc => `
+      <h3 class="sec">${CATEGORY[cc]}（${groups[cc].length}）</h3>
+      <div class="grid" style="margin-bottom:14px">
+        ${groups[cc].map(it => `
+          <div class="card clickable" data-id="${it.id}">
+            ${coverBlock(it, "cover", null, coverSrcOf(it, s.slug))}
+            <div class="card-body">
+              <div class="card-title">${esc(it.name)}</div>
+              <div class="card-meta">
+                <span class="badge edition">${EDITION[it.edition]}</span>
+              </div>
+            </div>
+          </div>`).join("")}
+      </div>`).join("")}`;
+  $app.querySelectorAll("[data-back]").forEach(b => b.onclick = () => { location.hash = "#/"; });
+  $app.querySelectorAll(".card[data-id]").forEach(cc => cc.onclick = () => { location.hash = "#/item/" + cc.dataset.id; });
+}
+
+/* ============================================================
+ * 藏品详情（FR-08）+ 加入收藏（FR-11/FR-12）
+ * ============================================================ */
+async function pageItem(id) {
+  const { data: it } = await db.from("items").select("*, series(name, slug)").eq("id", id).single();
+  if (!it) return $app.innerHTML = '<div class="empty">藏品不存在</div>';
+  const { data: imgs } = await db.from("item_images").select("*").eq("item_id", id).order("sort_order");
+  const { count } = await db.from("collections").select("id", { count: "exact", head: true }).eq("item_id", id).eq("is_public", true);
+
+  let mine = null;
+  if (me) {
+    const { data } = await db.from("collections").select("*").eq("user_id", me.id).eq("item_id", id).maybeSingle();
+    mine = data;
+  }
+
+  $app.innerHTML = `
+    <div class="chips"><span class="chip" data-back="1">← 返回</span>
+      <a class="chip" href="#/series/${esc(it.series.slug)}">${esc(it.series.name)}</a></div>
+    <div class="detail">
+      <div class="detail-cover">${(() => { const src = coverSrcOf(it); return src ? '<img src="' + esc(src) + '" alt="' + esc(it.name) + '">' : '<div class="ph">' + esc(it.name.slice(0, 1)) + "</div>"; })()}</div>
+      <div class="detail-info">
+        <h2>${esc(it.name)}</h2>
+        <div class="kv"><span class="k">系列</span><a href="#/series/${esc(it.series.slug)}" style="color:var(--green-d);font-weight:700">${esc(it.series.name)}</a></div>
+        <div class="kv"><span class="k">分类</span><span><span class="badge cat">${CATEGORY[it.category]}</span> <span class="badge edition">${EDITION[it.edition]}</span></span></div>
+        ${it.msrp != null ? '<div class="kv"><span class="k">参考价</span>' + fmtMoney(it.msrp) + "</div>" : ""}
+        ${it.release_date ? '<div class="kv"><span class="k">发售日期</span>' + esc(fmtDate(it.release_date)) + "</div>" : ""}
+        <div class="kv"><span class="k">公开收藏</span>${count || 0} 人</div>
+        ${(imgs && imgs.length) ? '<div class="detail-imgs">' + imgs.map(g => '<img src="' + esc(g.storage_path) + '" alt="' + esc(g.alt || it.name) + '" loading="lazy">').join("") + "</div>" : ""}
+        <div style="margin-top:16px">
+          ${!me
+            ? '<button class="btn" id="act" style="width:100%">登录后加入谷库</button>'
+            : mine
+              ? '<button class="btn ghost" id="act" style="width:100%">已入库 · 管理我的实拍图</button>'
+              : '<button class="btn" id="act" style="width:100%">＋ 加入我的谷库</button>'}
+        </div>
+      </div>
+    </div>`;
+  $app.querySelectorAll("[data-back]").forEach(b => b.onclick = () => history.length > 1 ? history.back() : (location.hash = "#/"));
+  document.getElementById("act").onclick = () => {
+    if (!me) return showAuthModal("login");
+    // 已入库：直接进相册管理（上传/换封面/编辑都在里面）
+    if (mine) return openShots(libRow(mine, it));
+    showCollectModal(it, mine);
+  };
+}
+
+/* ---------------- 收藏弹窗（FR-11/13/14） ---------------- */
+function showCollectModal(item, existing) {
+  const e = existing || {};
+  openModal((existing ? "编辑收藏 · " : "加入收藏 · ") + esc(item.name) + `
+    <div class="form">
+      <div class="field"><label>状态</label>
+        <select id="cStatus">${STATUS_ORDER.map(s => '<option value="' + s + '" ' + (e.status === s ? "selected" : "") + ">" + STATUS[s].zh + "</option>").join("")}</select></div>
+      <div class="form-row">
+        <div class="field"><label>入手价（可空）</label><input id="cPrice" type="number" min="0" step="0.01" value="${e.price != null ? e.price : ""}"></div>
+        <div class="field"><label>币种</label>
+          <select id="cCur">${CURRENCIES.map(c => '<option ' + ((e.currency || "CNY") === c ? "selected" : "") + ">" + c + "</option>").join("")}</select></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>入手日期（可空）</label><input id="cDate" type="date" value="${e.purchased_at || ""}"></div>
+        <div class="field"><label>渠道</label><input id="cSource" type="text" maxlength="40" placeholder="官方/代购/展会/二手" value="${esc(e.source || "")}"></div>
+      </div>
+      <div class="field"><label>评分</label>
+        <div class="stars" id="cStars">${[1,2,3,4,5].map(i => '<span class="star ' + ((e.rating || 0) >= i ? "on" : "") + '" data-v="' + i + '">★</span>').join("")}</div></div>
+      <div class="field"><label>备注（≤500 字）</label><textarea id="cNote" rows="2" maxlength="500">${esc(e.note || "")}</textarea></div>
+      <div class="field" style="display:flex;align-items:center;gap:8px">
+        <input id="cPublic" type="checkbox" ${e.is_public !== false ? "checked" : ""} style="width:auto">
+        <label for="cPublic" style="margin:0">公开到广场</label>
+      </div>
+      <button class="btn" id="cSave">${existing ? "保存修改" : "加入收藏"}</button>
+    </div>`);
+
+  let rating = e.rating || 0;
+  document.querySelectorAll("#cStars .star").forEach(st => st.onclick = () => {
+    rating = Number(st.dataset.v);
+    document.querySelectorAll("#cStars .star").forEach(x => x.classList.toggle("on", Number(x.dataset.v) <= rating));
+  });
+
+  document.getElementById("cSave").onclick = async () => {
+    const row = {
+      user_id: me.id,
+      item_id: item.id,
+      status: document.getElementById("cStatus").value,
+      price: document.getElementById("cPrice").value === "" ? null : Number(document.getElementById("cPrice").value),
+      currency: document.getElementById("cCur").value,
+      purchased_at: document.getElementById("cDate").value || null,
+      source: document.getElementById("cSource").value.trim() || null,
+      rating: rating || null,
+      note: document.getElementById("cNote").value.trim() || null,
+      is_public: document.getElementById("cPublic").checked,
+    };
+    let error;
+    if (existing) ({ error } = await db.from("collections").update(row).eq("id", existing.id));
+    else ({ error } = await db.from("collections").insert(row));
+    if (error) {
+      toast(error.code === "23505" ? "这件藏品你已经收藏过了" : "保存失败：" + error.message, true);
+      return;
+    }
+    closeModal();
+    toast(existing ? "已保存" : "已加入收藏 ✨");
+    route();
+  };
+}
+
+/* ============================================================
+ * 广场（FR-10）：is_public = true 的收藏，瀑布流
+ * ============================================================ */
+async function pagePlaza() {
+  if (!me) {
+    $app.innerHTML = '<div class="login-tip">广场里的晒谷内容登录后可见<br><button class="btn" style="margin-top:16px" id="pLogin">登录</button></div>';
+    document.getElementById("pLogin").onclick = () => showAuthModal("login");
+    return;
+  }
+  const BASE = "id, status, price, currency, note, created_at, profiles(nickname, avatar_url), items(id, name, cover_url, category, series(name, slug))";
+  // 先带上「实拍封面」——补丁 05 的 collection_images；表不存在时退回纯图鉴查询，广场不至于整个挂掉
+  let { data, error } = await db
+    .from("collections")
+    .select(BASE + ", collection_images(storage_path, is_cover)")
+    .eq("is_public", true)
+    .order("created_at", { ascending: false }).limit(50);
+  if (error) {
+    const r = await db
+      .from("collections")
+      .select(BASE)
+      .eq("is_public", true)
+      .order("created_at", { ascending: false }).limit(50);
+    data = r.data; error = r.error;
+  }
+  if (error) return toast("加载失败：" + error.message, true);
+  const list = data || [];
+
+  $app.innerHTML = `
+    <div class="sec-head" style="margin-top:6px">
+      <h3>广场 · 大家晒的谷</h3><span class="card-meta">最近 ${list.length} 条</span>
+    </div>
+    ${list.length === 0
+      ? '<div class="empty">还没有人晒收藏<br>去<a href="#/">发现</a>收一件，然后公开出来吧</div>'
+      : '<div class="feed">' + list.map(c => {
+          const p = c.profiles || {}, it = c.items || {};
+          const shots = c.collection_images || [];
+          const own = ((shots.filter(g => g.is_cover)[0] || shots[0]) || {}).storage_path || "";
+          return '<div class="post" data-id="' + esc(it.id || "") + '">' +
+            (own
+              ? '<div class="post-img"><img src="' + esc(own) + '" alt="' + esc(it.name || "") + '" loading="lazy"></div>'
+              : coverBlock(it, "post-img", null, coverSrcOf(it))) +
+            '<div class="post-body">' +
+              '<div class="post-title">' + esc(c.note || (it.name || "未命名藏品") + " · 已加入我的谷盒") + "</div>" +
+              (it.category ? '<span class="post-tag">#' + CATEGORY[it.category] + "</span>" : "") +
+              (own ? '<span class="post-tag" style="background:#EAF9F3;color:#23A87F">实拍</span>' : "") +
+              '<div class="post-foot">' +
+                '<span class="post-av">' + esc((p.nickname || "匿").slice(0, 1)) + "</span>" +
+                "<span>" + esc(p.nickname || "匿名") + "</span>" +
+                '<span style="margin-left:auto">' + statusBadge(c.status) + "</span>" +
+              "</div>" +
+            "</div></div>";
+        }).join("") + "</div>"}`;
+
+  $app.querySelectorAll(".post[data-id]").forEach(el => el.onclick = () => {
+    if (el.dataset.id) location.hash = "#/item/" + el.dataset.id;
+  });
+}
+
+/* ============================================================
+ * 我的谷库：藏品图片墙 + 状态筛选 + 实拍相册
+ * 数据来自视图 v_my_library（supabase/patch_05_library.sql 创建）
+ * 视图不存在时自动退回 collections 联表查询，只是没有实拍张数
+ * ============================================================ */
+let libFilter = "all", libKw = "", libNeedPatch = false;
+
+// 把「视图行」和「联表行」统一成一种形状，页面只认这一种
+function libRow(c, it) {
+  it = it || {};
+  const s = it.series || {};
+  return {
+    collection_id: c.collection_id || c.id,
+    status: c.status,
+    price: c.price,
+    currency: c.currency,
+    purchased_at: c.purchased_at,
+    source: c.source,
+    note: c.note,
+    rating: c.rating,
+    is_public: c.is_public,
+    item_id: c.item_id || it.id,
+    item_name: c.item_name || it.name,
+    category: c.category || it.category,
+    edition: c.edition || it.edition,
+    cover_url: c.cover_url != null ? c.cover_url : it.cover_url,
+    series_name: c.series_name || s.name,
+    series_slug: c.series_slug || s.slug,
+    photo_count: Number(c.photo_count) || 0,
+    cover_photo: c.cover_photo || "",
+  };
+}
+
+async function loadLibRows() {
+  const v = await db.from("v_my_library").select("*").order("updated_at", { ascending: false });
+  if (!v.error) {
+    libNeedPatch = false;
+    return (v.data || []).map(r => libRow(r));
+  }
+  // 视图还没建（补丁 SQL 没跑）：退回联表查询，功能降级但不白屏
+  libNeedPatch = true;
+  const q = await db.from("collections")
+    .select("id, status, price, currency, purchased_at, source, note, rating, is_public, updated_at, items(id, name, category, edition, cover_url, series(name, slug))")
+    .order("updated_at", { ascending: false });
+  return (q.data || []).map(r => libRow(r, r.items));
+}
+
+function libCard(r) {
+  const src = r.cover_photo || coverSrcOf({ cover_url: r.cover_url, category: r.category, series: { slug: r.series_slug } });
+  return '<div class="shot" data-cid="' + esc(r.collection_id) + '">' +
+    '<div class="shot-img">' +
+      (src
+        ? '<img src="' + esc(src) + '" alt="' + esc(r.item_name || "") + '" loading="lazy" onerror="this.remove()">'
+        : esc((r.item_name || "?").slice(0, 1))) +
+      (r.cover_photo ? '<span class="own">我的实拍</span>' : "") +
+    "</div>" +
+    '<div class="shot-body">' +
+      '<div class="shot-name">' + esc(r.item_name || "?") + "</div>" +
+      '<div class="shot-foot"><span>' + esc(r.series_name || "") + "</span>" +
+      '<span class="n">' + (r.photo_count ? r.photo_count + " 张" : "未上传") + "</span></div>" +
+    "</div></div>";
+}
+
+async function pageLibrary() {
+  if (!me) {
+    $app.innerHTML = '<div class="login-tip">谷库是你的私人藏图空间<br>' +
+      "登录后可以把藏品收进来、上传自己拍的实拍图<br>" +
+      '<button class="btn" style="margin-top:16px" id="libLogin">登录</button></div>';
+    document.getElementById("libLogin").onclick = () => showAuthModal("login");
+    return;
+  }
+
+  const all = await loadLibRows();
+  const kw = libKw.trim().toLowerCase();
+  const list = all.filter(r =>
+    (libFilter === "all" || r.status === libFilter) &&
+    (!kw || (r.item_name || "").toLowerCase().indexOf(kw) > -1 || (r.series_name || "").toLowerCase().indexOf(kw) > -1)
+  );
+  const photoTotal = all.reduce((n, r) => n + r.photo_count, 0);
+
+  $app.innerHTML = `
+    <div class="sec-head" style="margin-top:6px">
+      <h3>我的谷库</h3>
+      <button class="btn small" id="libAdd">＋ 添加藏品</button>
+    </div>
+    <div class="sub" style="margin-top:-8px">${all.length} 件藏品 · ${photoTotal} 张实拍图${libNeedPatch ? "" : " · 照片存 Supabase Storage"}</div>
+    ${libNeedPatch ? '<div class="banner">实拍图库还没启用：到 Supabase → SQL Editor 跑一遍 <b>supabase/patch_05_library.sql</b> 后刷新，就能上传自己的照片。现在先用公共图鉴图展示。</div>' : ""}
+    <div class="search-wrap">${icon.search}<input id="libQ" placeholder="搜我的藏品…" value="${esc(libKw)}"></div>
+    <div class="chips" id="libChips">
+      <span class="chip ${libFilter === "all" ? "active" : ""}" data-f="all">全部</span>
+      ${STATUS_ORDER.map(s => '<span class="chip ' + (libFilter === s ? "active" : "") + '" data-f="' + s + '">' + STATUS[s].zh + "</span>").join("")}
+    </div>
+    ${list.length === 0
+      ? '<div class="empty">' + (all.length
+          ? "没有符合条件的藏品"
+          : '谷库还是空的，点右上「＋ 添加藏品」把发现的藏品收进来') + "</div>"
+      : '<div class="lib-grid">' + list.map(libCard).join("") + "</div>"}`;
+
+  document.getElementById("libAdd").onclick = openAddItemModal;
+  let t2;
+  document.getElementById("libQ").oninput = ev => {
+    clearTimeout(t2);
+    t2 = setTimeout(() => { libKw = ev.target.value.trim(); pageLibrary(); }, 300);
+  };
+  $app.querySelectorAll("#libChips .chip").forEach(ch => ch.onclick = () => { libFilter = ch.dataset.f; pageLibrary(); });
+  $app.querySelectorAll(".shot[data-cid]").forEach(el => el.onclick = () => {
+    const row = list.find(x => x.collection_id === el.dataset.cid);
+    if (row) openShots(row);
+  });
+}
+
+/* ---------------- 添加藏品到谷库：搜图鉴 → 加入收藏 ---------------- */
+function openAddItemModal() {
+  openModal(`<h3>把藏品加入谷库</h3>
+    <div class="search-wrap">${icon.search}<input id="pickQ" placeholder="搜藏品名 / IP…" autocomplete="off"></div>
+    <div id="pickList" class="list" style="max-height:52vh;overflow:auto;margin-top:10px"></div>`);
+  const box = document.getElementById("pickList");
+
+  const draw = async (kw) => {
+    let q = db.from("items").select("id, name, category, cover_url, series(name, slug)");
+    if (kw) q = q.ilike("name", "%" + kw + "%");
+    const { data } = await q.order("name").limit(30);
+    const rows = data || [];
+    box.innerHTML = rows.length
+      ? rows.map(it => `
+        <div class="row-item" style="cursor:pointer" data-pick="${esc(it.id)}">
+          ${coverBlock(it, "thumb", it.name, coverSrcOf(it))}
+          <div class="row-main">
+            <div class="row-title">${esc(it.name)}</div>
+            <div class="row-sub">${esc((it.series && it.series.name) || "")} · ${CATEGORY[it.category] || ""}</div>
+          </div>
+          <div class="row-right"><span class="badge cat">加入</span></div>
+        </div>`).join("")
+      : '<div class="empty" style="padding:26px 0">没找到藏品</div>';
+    box.querySelectorAll("[data-pick]").forEach(el => el.onclick = () => {
+      const it = rows.find(x => x.id === el.dataset.pick);
+      closeModal();
+      showCollectModal(it, null);
+    });
+  };
+  draw("");
+  let t;
+  document.getElementById("pickQ").oninput = ev => {
+    clearTimeout(t);
+    t = setTimeout(() => draw(ev.target.value.trim()), 280);
+  };
+}
+
+/* ---------------- 相册管理：上传 / 删除 / 设封面 ---------------- */
+// Supabase 公开链接 → Storage 对象路径（删文件时要用）
+function shotPath(url) {
+  const k = "/object/public/my-shots/";
+  const i = (url || "").indexOf(k);
+  return i < 0 ? "" : decodeURIComponent(url.slice(i + k.length).split("?")[0]);
+}
+
+async function openShots(row) {
+  const { data, error } = await db.from("collection_images")
+    .select("*").eq("collection_id", row.collection_id)
+    .order("is_cover", { ascending: false }).order("created_at", { ascending: true });
+  renderShotsModal(row, data || [], !!error);
+}
+
+function renderShotsModal(row, photos, missing) {
+  const reload = () => {
+    openShots(row);
+    if ((location.hash || "").indexOf("library") > -1) pageLibrary();
+  };
+
+  openModal(`
+    <div style="display:flex;align-items:flex-start;gap:10px">
+      <div style="flex:1;min-width:0">
+        <h3 style="margin:0 0 4px">${esc(row.item_name || "?")}</h3>
+        <div style="font-size:11.5px;color:var(--text2)">${esc(row.series_name || "")}${photos.length ? " · " + photos.length + " 张实拍" : ""}</div>
+      </div>
+      ${statusBadge(row.status)}
+    </div>
+    ${missing ? '<div class="banner" style="margin-top:12px">实拍图库未启用：先在 Supabase 跑 <b>supabase/patch_05_library.sql</b>，刷新后再来上传。</div>' : ""}
+    <div class="shots" style="margin:14px 0 6px">
+      ${photos.map(g => `
+        <div class="ph">
+          <img src="${esc(g.storage_path)}" alt="${esc(g.alt || row.item_name || "")}" loading="lazy">
+          ${g.is_cover
+            ? '<span class="cv">封面</span>'
+            : '<span class="cv off" data-cover="' + esc(g.id) + '">设为封面</span>'}
+          <span class="x" data-del="${esc(g.id)}">✕</span>
+        </div>`).join("")}
+      ${missing ? "" : `<label class="ph add"><b>＋</b><span>上传照片</span>
+        <input type="file" id="shotFile" accept="image/jpeg,image/png,image/webp" multiple style="display:none"></label>`}
+    </div>
+    <div style="font-size:11px;color:var(--text2)">jpg/png/webp，自动压到长边 1100px，每件最多 20 张</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
+      <button class="btn light small" id="sEdit">编辑收藏信息</button>
+      <button class="btn light small" id="sPage">打开藏品页</button>
+      <button class="btn danger small" id="sDel">删除这件收藏</button>
+    </div>`);
+
+  document.getElementById("sEdit").onclick = () => {
+    closeModal();
+    showCollectModal({ id: row.item_id, name: row.item_name }, {
+      id: row.collection_id, status: row.status, price: row.price, currency: row.currency,
+      purchased_at: row.purchased_at, source: row.source, rating: row.rating,
+      note: row.note, is_public: row.is_public,
+    });
+  };
+  document.getElementById("sPage").onclick = () => { closeModal(); location.hash = "#/item/" + row.item_id; };
+  document.getElementById("sDel").onclick = async () => {
+    if (!confirm("删除《" + (row.item_name || "") + "》？已上传的实拍图会一起删除")) return;
+    const { error } = await db.from("collections").delete().eq("id", row.collection_id);
+    if (error) return toast("删除失败：" + error.message, true);
+    closeModal(); toast("已从谷库移除");
+    pageLibrary();
+  };
+
+  const file = document.getElementById("shotFile");
+  if (file) file.onchange = ev => uploadShots(row, Array.prototype.slice.call(ev.target.files), reload);
+  document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
+    const g = photos.find(x => x.id === b.dataset.del);
+    if (g) deleteShot(g, reload);
+  });
+  document.querySelectorAll("[data-cover]").forEach(b => b.onclick = async () => {
+    const g = photos.find(x => x.id === b.dataset.cover);
+    if (g) await setShotCover(row, g, reload);
+  });
+}
+
+async function uploadShots(row, files, done) {
+  if (!files.length) return;
+  let ok = 0;
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    if (!/image\/(jpeg|png|webp)/.test(f.type)) { toast("跳过非图片：" + f.name, true); continue; }
+    toast("上传中 " + (i + 1) + "/" + files.length + "…");
+    let blob;
+    try { blob = await compressImage(f, 1100, 320 * 1024); }
+    catch (e) { toast("压缩失败：" + f.name, true); continue; }
+
+    // 路径首段必须是 uid，Storage 策略按它隔离
+    const path = me.id + "/" + row.collection_id + "/" +
+      Date.now() + "-" + Math.random().toString(36).slice(2, 7) + ".webp";
+    const up = await db.storage.from("my-shots").upload(path, blob, { contentType: "image/webp", upsert: false });
+    if (up.error) { toast("上传失败：" + up.error.message, true); continue; }
+
+    const pub = db.storage.from("my-shots").getPublicUrl(path);
+    const ins = await db.from("collection_images").insert({
+      collection_id: row.collection_id,
+      user_id: me.id,
+      storage_path: pub.data.publicUrl,
+      alt: row.item_name || null,
+      sort_order: ok,
+    });
+    if (ins.error) {
+      // 入库失败就把文件删掉，不留孤儿对象
+      await db.storage.from("my-shots").remove([path]);
+      toast("入库失败：" + ins.error.message, true);
+      continue;
+    }
+    ok++;
+  }
+  if (ok) toast("已上传 " + ok + " 张实拍图");
+  if (done) done();
+}
+
+async function deleteShot(g, done) {
+  if (!confirm("删除这张照片？")) return;
+  const { error } = await db.from("collection_images").delete().eq("id", g.id);
+  if (error) return toast("删除失败：" + error.message, true);
+  const p = shotPath(g.storage_path);
+  if (p) await db.storage.from("my-shots").remove([p]);
+  toast("已删除");
+  if (done) done();
+}
+
+async function setShotCover(row, g, done) {
+  // 先全部置 false 再置 true，否则中间态撞上「一件只有一张封面」的唯一索引
+  await db.from("collection_images").update({ is_cover: false }).eq("collection_id", row.collection_id);
+  const { error } = await db.from("collection_images").update({ is_cover: true }).eq("id", g.id);
+  if (error) return toast("设置失败：" + error.message, true);
+  toast("已设为封面");
+  if (done) done();
+}
+
+/* ============================================================
+ * 看板（FR-19~22）：调 fn_dashboard RPC
+ * ============================================================ */
+async function pageDashboard() {
+  if (!me) return;
+  const { data: d, error } = await db.rpc("fn_dashboard", { p_user: me.id });
+  if (error) return $app.innerHTML = '<div class="empty">统计失败：' + esc(error.message) + "</div>";
+  const st = d.stats || {};
+  const bySeries = d.by_series || [];
+  const maxS = bySeries.length ? Math.max(...bySeries.map(x => x.cnt)) : 1;
+  const statusCounts = STATUS_ORDER.map(s => [s, st[s] || 0]);
+  const maxSt = Math.max(1, ...statusCounts.map(x => x[1]));
+
+  $app.innerHTML = `
+    <div class="sec-head" style="margin-top:6px"><h3>收藏看板</h3></div>
+    <div class="sub" style="margin-top:-8px">数据由数据库函数 fn_dashboard() 服务端聚合</div>
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${st.total || 0}</div><div class="lbl">收藏总数</div></div>
+      <div class="stat"><div class="num" style="color:var(--owned)">${st.owned || 0}</div><div class="lbl">已入手</div></div>
+      <div class="stat"><div class="num" style="color:var(--preorder)">${st.preorder || 0}</div><div class="lbl">预购中</div></div>
+      <div class="stat"><div class="num" style="color:var(--wishlist)">${st.wishlist || 0}</div><div class="lbl">想入</div></div>
+      <div class="stat"><div class="num" style="color:var(--sold)">${st.sold || 0}</div><div class="lbl">已出</div></div>
+      <div class="stat"><div class="num">${fmtMoney(st.total_spend || 0)}</div><div class="lbl">已入手总花费</div></div>
+    </div>
+    <h3 class="sec">按 IP 分布</h3>
+    ${bySeries.length === 0 ? '<div class="empty">暂无数据</div>' : bySeries.map(s => `
+      <div class="bar-row">
+        <div class="bar-label" title="${esc(s.name)}">${esc(s.name)}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(s.cnt / maxS * 100).toFixed(1)}%"></div></div>
+        <div class="bar-num">${s.cnt}</div>
+      </div>`).join("")}
+    <h3 class="sec">按状态分布</h3>
+    ${statusCounts.map(([n, v]) => `
+      <div class="bar-row">
+        <div class="bar-label">${STATUS[n].zh}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(v / maxSt * 100).toFixed(1)}%;background:${({owned:"#16A34A",preorder:"#2563EB",wishlist:"#D97706",sold:"#6B7280"})[n]}"></div></div>
+        <div class="bar-num">${v}</div>
+      </div>`).join("")}`;
+}
+
+/* ============================================================
+ * 个人档案（FR-03/04）
+ * ============================================================ */
+async function pageProfile() {
+  if (!me) return;
+  const p = myProfile || {};
+  $app.innerHTML = `
+    <div class="sec-head" style="margin-top:6px"><h3>个人档案</h3></div>
+    <div class="admin-panel">
+      <div class="form">
+        <div class="field" style="text-align:center">
+          <div style="width:92px;height:92px;margin:0 auto;border-radius:50%;overflow:hidden;background:var(--green-l)">
+            ${p.avatar_url ? '<img src="' + esc(p.avatar_url) + '" style="width:100%;height:100%;object-fit:cover">' : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:800;color:var(--green-d)">' + esc((p.nickname || "?").slice(0,1)) + "</div>"}
+          </div>
+          <input type="file" id="fAvatar" accept="image/jpeg,image/png,image/webp" style="margin-top:10px;font-size:12px">
+          <div style="font-size:11.5px;color:var(--text2)">jpg/png/webp，≤2MB，自动压缩</div>
+        </div>
+        <div class="field"><label>昵称（1～24 字）</label><input id="fNick" maxlength="24" value="${esc(p.nickname || "")}"></div>
+        <div class="field"><label>简介（≤140 字）</label><textarea id="fBio" maxlength="140" rows="3">${esc(p.bio || "")}</textarea></div>
+        <button class="btn" id="fSave">保存</button>
+      </div>
+    </div>`;
+
+  document.getElementById("fSave").onclick = async () => {
+    const nick = document.getElementById("fNick").value.trim();
+    const bio = document.getElementById("fBio").value.trim() || null;
+    if (!nick) return toast("昵称不能为空", true);
+    const { error } = await db.from("profiles").update({ nickname: nick, bio }).eq("id", me.id);
+    if (error) return toast("保存失败：" + error.message, true);
+    myProfile = { ...myProfile, nickname: nick, bio };
+    renderUserBox(); toast("已保存");
+  };
+
+  document.getElementById("fAvatar").onchange = async ev => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    if (!/image\/(jpeg|png|webp)/.test(file.type)) return toast("仅支持 jpg/png/webp", true);
+    toast("压缩上传中…");
+    const blob = await compressImage(file, 300, 150 * 1024);
+    const path = me.id + "/avatar.webp";
+    const { error } = await db.storage.from("avatars").upload(path, blob, { contentType: "image/webp", upsert: true });
+    if (error) return toast("头像上传失败：" + error.message, true);
+    const { data } = db.storage.from("avatars").getPublicUrl(path);
+    const url = data.publicUrl.split("?")[0] + "?t=" + Date.now();
+    await db.from("profiles").update({ avatar_url: url }).eq("id", me.id);
+    myProfile = { ...myProfile, avatar_url: url };
+    renderUserBox(); toast("头像已更新"); pageProfile();
+  };
+}
+
+/* ---------------- 图片压缩（canvas） ---------------- */
+function compressImage(file, maxW, maxBytes) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxW / img.width);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        let quality = 0.82;
+        const step = () => canvas.toBlob(b => {
+          if (!b) return reject(new Error("压缩失败"));
+          if (b.size <= maxBytes || quality <= 0.3) return resolve(b);
+          quality -= 0.12; step();
+        }, "image/webp", quality);
+        step();
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ============================================================
+ * 管理端（FR-30/31/32/33）：系列/藏品/标签
+ * ============================================================ */
+async function pageAdmin() {
+  if (!me || !myProfile || !myProfile.is_admin) return;
+  const { data: series } = await db.from("series").select("*").order("name");
+  const { data: tags } = await db.from("tags").select("*").order("name");
+  // 用户账户（auth.users + login_logs）和最近登录流水，都走 admin-only 的 RPC
+  const acc = await db.rpc("fn_list_accounts");
+  const accounts = Array.isArray(acc.data) ? acc.data : [];
+  const accErr = acc.error ? (acc.error.message || "未启用") : "";
+  const rl = accErr ? { data: [] } : await db.rpc("fn_recent_logins", { p_limit: 8 });
+  const recent = Array.isArray(rl.data) ? rl.data : [];
+
+  $app.innerHTML = `
+    <div class="sec-head" style="margin-top:6px"><h3>内容管理</h3></div>
+    <div class="sub" style="margin-top:-8px">维护公共图鉴数据（写入受 RLS 保护，仅管理员可写）</div>
+
+    <div class="admin-panel">
+      <h3>用户账户（${accErr ? "未启用" : accounts.length + " 人"}）</h3>
+      ${accErr
+        ? '<div class="banner">用户账户表还没启用：到 Supabase → SQL Editor 跑一遍 <b>supabase/patch_06_auth.sql</b> 后刷新。</div>'
+        : `<div class="sub" style="margin-top:-6px">来源 auth.users + login_logs。密码列只显示算法名——库里存的是 bcrypt 单向哈希，不可逆，本站也读不到明文。</div>
+           ${accounts.length === 0 ? '<div class="card-meta">还没有注册用户</div>' : '<div class="list">' + accounts.map(a2 => `
+             <div class="row-item">
+               <span class="thumb" style="font-size:15px;font-weight:800">${esc((a2.email || "?").slice(0, 1).toUpperCase())}</span>
+               <div class="row-main">
+                 <div class="row-title">${esc(a2.email || "(无邮箱)")}${a2.is_admin ? ' <span class="badge cat">管理员</span>' : ""}</div>
+                 <div class="row-sub">
+                   ${esc(a2.nickname || "未命名")} · ${a2.email_confirmed ? "邮箱已验证" : "邮箱未验证"}
+                   · 密码 ${esc(a2.password_algo || "?")} · 登录 ${a2.login_count || 0} 次
+                   · 注册 ${esc(fmtDate(a2.signed_up_at))}
+                   ${a2.last_login_at ? " · 最近 " + esc(fmtDate(a2.last_login_at)) : ""}
+                 </div>
+               </div>
+             </div>`).join("") + "</div>"}`}
+      ${accErr ? "" : `<h3 style="margin-top:18px">最近登录流水</h3>
+        ${recent.length === 0
+          ? '<div class="card-meta">还没有记录</div>'
+          : '<div class="list">' + recent.map(r => `
+              <div class="row-item">
+                <div class="row-main">
+                  <div class="row-title" style="font-size:13px">${esc(r.email || "")} <span class="badge edition">${esc(r.event)}</span></div>
+                  <div class="row-sub">${esc(r.nickname || "")} · ${esc(fmtDate(r.created_at))}${r.user_agent ? " · " + esc(String(r.user_agent).slice(0, 60)) : ""}</div>
+                </div>
+              </div>`).join("") + "</div>"}`}
+    </div>
+
+    <div class="admin-panel">
+      <h3>＋ 新增 IP / 系列</h3>
+      <div class="form">
+        <div class="field"><label class="req">系列名</label><input id="aSeriesName" placeholder="如：DIMOO"></div>
+        <div class="field"><label>slug（英文，用于链接）</label><input id="aSeriesSlug" placeholder="dimoo"></div>
+        <div class="field"><label>简介</label><input id="aSeriesDesc" placeholder="一句话介绍"></div>
+        <button class="btn" id="aSeriesBtn">添加</button>
+      </div>
+    </div>
+
+    <div class="admin-panel">
+      <h3>＋ 新增藏品</h3>
+      <div class="form">
+        <div class="field"><label class="req">所属系列</label>
+          <select id="aItemSeries">${(series || []).map(s => '<option value="' + s.id + '">' + esc(s.name) + "</option>").join("")}</select></div>
+        <div class="field"><label class="req">藏品名</label><input id="aItemName" placeholder="如：DIMOO 太空旅行系列 手办"></div>
+        <div class="form-row">
+          <div class="field"><label>分类</label><select id="aItemCat">${CATEGORY_ORDER.map(cc => '<option value="' + cc + '">' + CATEGORY[cc] + "</option>").join("")}</select></div>
+          <div class="field"><label>版本</label><select id="aItemEdition">${Object.keys(EDITION).map(e2 => '<option value="' + e2 + '">' + EDITION[e2] + "</option>").join("")}</select></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>参考价（可空）</label><input id="aItemMsrp" type="number" min="0" step="0.01"></div>
+          <div class="field"><label>发售日期（可空）</label><input id="aItemDate" type="date"></div>
+        </div>
+        <div class="field"><label>封面图 URL（可空）</label><input id="aItemCover" placeholder="https://…"></div>
+        <button class="btn" id="aItemBtn">添加</button>
+      </div>
+    </div>
+
+    <div class="admin-panel">
+      <h3>＋ 标签管理</h3>
+      <div class="chips">${(tags || []).map(t => '<span class="chip" title="点击删除">' + esc(t.name) + " ✕</span>").join("") || '<span class="card-meta">暂无标签</span>'}</div>
+      <div class="form-row" style="max-width:400px;margin-top:8px">
+        <div class="field"><label class="req">新标签名</label><input id="aTagName" placeholder="如：盲盒"></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn" id="aTagBtn">添加</button></div>
+      </div>
+    </div>`;
+
+  document.getElementById("aSeriesBtn").onclick = async () => {
+    const name = document.getElementById("aSeriesName").value.trim();
+    const slug = document.getElementById("aSeriesSlug").value.trim() || ("series-" + Date.now().toString(36));
+    const description = document.getElementById("aSeriesDesc").value.trim() || null;
+    if (!name) return toast("请填写系列名", true);
+    const { error } = await db.from("series").insert({ name, slug, description });
+    if (error) return toast("添加失败：" + (error.code === "23505" ? "名称或 slug 已存在" : error.message), true);
+    toast("系列已添加"); pageAdmin();
+  };
+  document.getElementById("aItemBtn").onclick = async () => {
+    const row = {
+      series_id: document.getElementById("aItemSeries").value,
+      name: document.getElementById("aItemName").value.trim(),
+      category: document.getElementById("aItemCat").value,
+      edition: document.getElementById("aItemEdition").value,
+      msrp: document.getElementById("aItemMsrp").value === "" ? null : Number(document.getElementById("aItemMsrp").value),
+      release_date: document.getElementById("aItemDate").value || null,
+      cover_url: document.getElementById("aItemCover").value.trim() || null,
+    };
+    if (!row.name || !row.series_id) return toast("请选择系列并填写藏品名", true);
+    const { error } = await db.from("items").insert(row);
+    if (error) return toast("添加失败：" + (error.code === "23505" ? "同系列下已存在同名藏品" : error.message), true);
+    toast("藏品已添加"); pageAdmin();
+  };
+  document.getElementById("aTagBtn").onclick = async () => {
+    const name = document.getElementById("aTagName").value.trim();
+    if (!name) return toast("请填写标签名", true);
+    const { error } = await db.from("tags").insert({ name });
+    if (error) return toast("添加失败：" + (error.code === "23505" ? "标签已存在" : error.message), true);
+    toast("标签已添加"); pageAdmin();
+  };
+  $app.querySelectorAll(".chips .chip[title]").forEach(ch => ch.onclick = async () => {
+    const name = ch.textContent.replace("✕", "").trim();
+    if (!confirm("删除标签「" + name + "」？关联关系会一并删除")) return;
+    const tag = (tags || []).find(t => t.name === name);
+    if (tag) await db.from("tags").delete().eq("id", tag.id);
+    pageAdmin();
+  });
+}
+
+/* ---------------- 启动 ---------------- */
+async function boot() {
+  if (!KEY_OK) {
+    $app.innerHTML = '<div class="banner">⚠️ 还没配置 anon key：打开本文件，把 SUPABASE_ANON_KEY 的值替换为你的 Supabase anon/public key，刷新即可。</div>';
+    renderUserBox(); renderNav(); return;
+  }
+  await loadMe();
+  renderUserBox();
+  renderNav();
+  route();
+  // 点邮件里的「重置密码」链接回来时，supabase-js 会把会话塞进 URL，
+  // 触发 PASSWORD_RECOVERY；这里直接弹「设置新密码」，不让用户停在原地
+  if (db && db.auth && typeof db.auth.onAuthStateChange === "function") {
+    db.auth.onAuthStateChange((ev) => {
+      if (ev === "PASSWORD_RECOVERY") showAuthModal("newpass");
+    });
+  }
+}
+window.addEventListener("hashchange", route);
+boot();
+</script>
+</body>
+</html>

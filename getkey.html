@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>取回 anon key</title>
+<style>
+  body { font-family:"Microsoft YaHei",sans-serif; background:#f5f6f8; padding:40px 20px; color:#1f2937; }
+  .wrap { max-width:780px; margin:0 auto; background:#fff; border:1px solid #e4e7ec; border-radius:14px; padding:28px; }
+  h1 { font-size:20px; color:#1F3864; margin-bottom:6px; }
+  p.sub { color:#6b7280; font-size:14px; margin-bottom:22px; line-height:1.7; }
+  button { padding:11px 24px; border:none; border-radius:8px; background:#1F3864;
+           color:#fff; font-weight:600; cursor:pointer; font-size:14px; font-family:inherit; }
+  button:hover { opacity:.88; }
+  .res { margin-top:18px; padding:15px; border-radius:8px; font-size:13px; word-break:break-all; display:none; line-height:1.7; }
+  .ok { background:#f0fdf4; border:1px solid #86efac; }
+  .bad { background:#fef2f2; border:1px solid #fca5a5; color:#b91c1c; }
+  code { background:#eef1f6; padding:2px 6px; border-radius:4px; font-family:Consolas,monospace; }
+  .big { font-size:14px; font-weight:600; margin:12px 0; font-family:Consolas,monospace;
+         background:#fff; border:1px solid #bbf7d0; padding:12px; border-radius:6px;
+         -webkit-user-select:all; user-select:all; word-break:break-all; }
+  ol { padding-left:20px; color:#374151; font-size:14px; line-height:2; }
+  .tip { background:#eff6ff; border-left:3px solid #2563EB; padding:12px 14px; border-radius:6px;
+         font-size:13.5px; color:#1e40af; margin-bottom:18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>取回 anon key</h1>
+  <p class="sub">这个页面会使用你浏览器里已登录的 Supabase 会话，直接调用官方 API 取回本项目的 publishable / anon key。</p>
+
+  <div class="tip">
+    <b>前提：</b>当前浏览器已登录 <code>supabase.com</code> 并打开过项目 <code>magjnwhcykhtzqfdhhmf</code>。
+    没有的话，先在另一个标签页登录，再回来点下面的按钮。
+  </div>
+
+  <button id="go">从浏览器会话取回 key</button>
+  <div class="res" id="res"></div>
+</div>
+
+<script>
+const REF = "magjnwhcykhtzqfdhhmf";
+const res = document.getElementById("res");
+
+function show(ok, html) {
+  res.style.display = "block";
+  res.className = "res " + (ok ? "ok" : "bad");
+  res.innerHTML = html;
+}
+
+document.getElementById("go").onclick = async () => {
+  // Supabase 新版控制台会话 key 前缀为 sb-
+  let token = null;
+  const tried = [];
+
+  const cands = [
+    "sb-" + REF + "-auth-token",
+    "sb-api-auth-token",
+    "supabase-auth-token"
+  ];
+  for (const k of cands) {
+    const raw = localStorage.getItem(k);
+    tried.push(k + (raw ? " ✓" : " ✗"));
+    if (!raw) continue;
+    try {
+      const o = JSON.parse(raw);
+      token = o.access_token
+           || (o.currentSession && o.currentSession.access_token)
+           || (Array.isArray(o) && o[0] && o[0].access_token) || null;
+      if (token) break;
+    } catch (e) {}
+  }
+
+  // 兜底：扫描所有 localStorage 里像 JWT 的 access_token
+  if (!token) {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      const v = localStorage.getItem(k) || "";
+      if (v.indexOf("access_token") === -1) continue;
+      try {
+        const o = JSON.parse(v);
+        const t = o.access_token || (o.currentSession && o.currentSession.access_token);
+        if (t && t.split(".").length === 3) { token = t; tried.push("扫描命中: " + k); break; }
+      } catch (e) {}
+    }
+  }
+
+  if (!token) {
+    show(false, "没找到登录会话。检查过：" + tried.map(s => "<code>" + s + "</code>").join(" ") +
+      "<br><br>请先在 <b>supabase.com</b> 登录，并打开项目再回来点一次。");
+    return;
+  }
+
+  show(true, "找到会话，正在请求项目密钥…");
+
+  try {
+    const r = await fetch("https://api.supabase.com/v1/projects/" + REF + "/api-keys", {
+      headers: { Authorization: "Bearer " + token }
+    });
+    if (!r.ok) {
+      let detail = "";
+      try { detail = (await r.text()).slice(0, 200); } catch (e) {}
+      show(false, "请求失败 HTTP " + r.status +
+        (r.status === 401 ? "<br>会话已过期，请重新登录 supabase.com 后再试。" : "<br>" + detail));
+      return;
+    }
+    const keys = await r.json();
+    const list = Array.isArray(keys) ? keys : (keys.keys || []);
+
+    // 优先 anon，其次 publishable
+    const pick = list.find(k => k.name === "anon")
+              || list.find(k => k.type === "publishable")
+              || list.find(k => k.api_key && k.api_key.startsWith("sb_publishable_"))
+              || list.find(k => k.api_key && k.api_key.startsWith("eyJ"));
+
+    if (!pick) {
+      show(false, "返回里没有 anon / publishable key。原始数据：<pre style='white-space:pre-wrap;font-size:12px'>" +
+        JSON.stringify(list, null, 2).replace(/</g, "&lt;") + "</pre>");
+      return;
+    }
+
+    const key = pick.api_key || pick.key || "";
+    let note = "";
+    if (key.startsWith("eyJ")) {
+      try {
+        const p = JSON.parse(atob(key.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+        note = "（ref=" + p.ref + "，role=" + p.role + "）";
+        if (p.ref !== REF) note += " ⚠️ ref 不匹配";
+      } catch (e) {}
+    }
+
+    show(true,
+      "<div style='font-weight:600'>取回成功，长度 " + key.length + " 字符 " + note + "</div>" +
+      "<div class='big' id='k'>" + key + "</div>" +
+      "<div style='font-size:12.5px;color:#6b7280'>已尝试自动复制。若没复制成功，请点上面这行文字（已设为可整体选中），Ctrl+C 复制后发给 ky。</div>"
+    );
+    try { await navigator.clipboard.writeText(key); } catch (e) {}
+  } catch (e) {
+    show(false, "网络或脚本错误：" + e.message);
+  }
+};
+</script>
+</body>
+</html>
