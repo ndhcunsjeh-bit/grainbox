@@ -1,0 +1,24 @@
+# 作业过程脚本与临时文件
+_*.py
+_*.txt
+_*.js
+_*.html
+_key.txt
+_env_probe.txt
+_deploy/
+
+# 演示/提交材料（非线上站点核心）
+谷盒GrainBox介绍PPT/
+作业提交/
+generated-images/
+
+# 测试脚本（开发验证用，不上线）
+tests/
+
+# WorkBuddy 项目数据与临时文件
+.workbuddy/
+.wbapp_*
+
+# 系统文件
+.DS_Store
+Thumbs.db
